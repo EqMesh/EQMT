@@ -16,15 +16,15 @@ contract EQMT {
     }
 
     // UUID → Position
-    mapping(string => Position) public positions;
+    mapping(bytes32 => Position) public positions;
 
-    // Wallet → currently active UUID (for fast lookup)
-    mapping(address => string) public activeUUID;
+    // Wallet → active UUID
+    mapping(address => bytes32) public activeUUID;
 
     // ------------------------ EVENTS ------------------------
 
     event EQMTMinted(
-        string uuid,
+        bytes32 indexed uuid,
         address owner,
         uint16 fcid,
         uint64 bid,
@@ -33,25 +33,25 @@ contract EQMT {
     );
 
     event EQMTCredited(
-        string uuid,
+        bytes32 indexed uuid,
         uint256 amount,
         string ref
     );
 
     event EQMTLiquidated(
-        string uuid,
+        bytes32 indexed uuid,
         uint256 amount,
         address to
     );
 
     event EQMTOwnerChanged(
-        string uuid,
+        bytes32 indexed uuid,
         address from,
         address to
     );
 
-    event EQMTClosed(string uuid);
-    event EQMTBurned(string uuid);
+    event EQMTClosed(bytes32 indexed uuid);
+    event EQMTBurned(bytes32 indexed uuid);
 
     // ------------------------ MODIFIERS ------------------------
 
@@ -60,7 +60,7 @@ contract EQMT {
         _;
     }
 
-    modifier positionExists(string memory uuid) {
+    modifier positionExists(bytes32 uuid) {
         require(positions[uuid].owner != address(0), "Position does not exist");
         _;
     }
@@ -71,10 +71,9 @@ contract EQMT {
 
     // ------------------------ ADMIN FUNCTIONS ------------------------
 
-    // Mint new position OR overwrite existing UUID
-    // Ensures: only 1 active position per wallet
+    // Mint or overwrite a position
     function mintEQMT(
-        string calldata uuid,
+        bytes32 uuid,
         address wallet,
         uint16 fcid,
         uint64 bid,
@@ -84,14 +83,14 @@ contract EQMT {
         external
         onlyAdmin
     {
-        // If this wallet had an active position, close it
-        string memory oldUUID = activeUUID[wallet];
-        if (bytes(oldUUID).length > 0 && positions[oldUUID].active == true) {
+        // Close existing active UUID for this wallet
+        bytes32 oldUUID = activeUUID[wallet];
+        if (oldUUID != bytes32(0) && positions[oldUUID].active) {
             positions[oldUUID].active = false;
             emit EQMTClosed(oldUUID);
         }
 
-        // Overwrite or create new position
+        // Create/overwrite position
         positions[uuid] = Position({
             fcid: fcid,
             bid: bid,
@@ -107,8 +106,8 @@ contract EQMT {
         emit EQMTMinted(uuid, wallet, fcid, bid, sanity, baseequity);
     }
 
-    // Admin credits ETH to a UUID, reference = off-chain account identifier
-    function creditEQMT(string calldata uuid, string calldata ref)
+    // Admin credits ETH into a position
+    function creditEQMT(bytes32 uuid, string calldata ref)
         external
         payable
         onlyAdmin
@@ -122,30 +121,30 @@ contract EQMT {
         emit EQMTCredited(uuid, msg.value, ref);
     }
 
-    // Admin assigns a position to a new wallet
-    function adminReassign(string calldata uuid, address newWallet)
+    // Admin reassigns the position to a new wallet
+    function adminReassign(bytes32 uuid, address newWallet)
         external
         onlyAdmin
         positionExists(uuid)
     {
-        address oldWallet = positions[uuid].owner;
+        Position storage p = positions[uuid];
+        address oldWallet = p.owner;
 
-        // Close the new wallet's currently active position, if any
-        string memory oldUUID = activeUUID[newWallet];
-        if (bytes(oldUUID).length > 0 && positions[oldUUID].active == true) {
-            positions[oldUUID].active = false;
-            emit EQMTClosed(oldUUID);
+        // Close new wallet's existing active position, if any
+        bytes32 existing = activeUUID[newWallet];
+        if (existing != bytes32(0) && positions[existing].active) {
+            positions[existing].active = false;
+            emit EQMTClosed(existing);
         }
 
-        // Update mapping
-        positions[uuid].owner = newWallet;
+        p.owner = newWallet;
         activeUUID[newWallet] = uuid;
 
         emit EQMTOwnerChanged(uuid, oldWallet, newWallet);
     }
 
-    // Admin closes, but does not erase the position
-    function closeEQMT(string calldata uuid)
+    // Close (but keep stored)
+    function closeEQMT(bytes32 uuid)
         external
         onlyAdmin
         positionExists(uuid)
@@ -154,8 +153,8 @@ contract EQMT {
         emit EQMTClosed(uuid);
     }
 
-    // Admin removes a position completely
-    function burnEQMT(string calldata uuid)
+    // Delete permanently
+    function burnEQMT(bytes32 uuid)
         external
         onlyAdmin
         positionExists(uuid)
@@ -164,10 +163,10 @@ contract EQMT {
         emit EQMTBurned(uuid);
     }
 
-    // ------------------------ CLIENT FUNCTION ------------------------
+    // ------------------------ CLIENT FUNCTIONS ------------------------
 
-    // Client withdraws full balance only
-    function liquidateEQMT(string calldata uuid)
+    // User withdraws full balance
+    function liquidateEQMT(bytes32 uuid)
         external
         positionExists(uuid)
     {
@@ -188,7 +187,7 @@ contract EQMT {
 
     // ------------------------ VIEW HELPERS ------------------------
 
-    function getPosition(string calldata uuid)
+    function getPosition(bytes32 uuid)
         external
         view
         returns (Position memory)
@@ -199,7 +198,7 @@ contract EQMT {
     function getActiveUUID(address wallet)
         external
         view
-        returns (string memory)
+        returns (bytes32)
     {
         return activeUUID[wallet];
     }
