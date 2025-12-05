@@ -2,116 +2,211 @@
 pragma solidity ^0.8.21;
 
 contract EQMT {
-    event EQMTCreated(bytes16 uuid, address owner, uint16 fcid, uint64 bid, uint256 baseequity);
-    event EQMTProfitCredited(bytes16 uuid, uint256 amount);
-    event EQMTProfitWithdrawn(bytes16 uuid, uint256 amount);
-    event EQMTSanityUpdated(bytes16 uuid, string sanityJson);
-    event EQMTReassigned(bytes16 uuid, address oldOwner, address newOwner);
-    event EQMTClosed(bytes16 uuid);
-    event EQMTBurned(bytes16 uuid);
 
+    //-------------------------
+    // DATA STRUCTURE
+    //-------------------------
+    struct Position {
+        uint16 fcid;
+        uint64 bid;
+        string sanity;      // external parameter JSON
+        uint256 baseequity; // off-chain equity representation
+        uint256 equityBalance;
+        bool active;
+        address owner;
+        string notes;       // NEW: admin notes
+    }
+
+    // MAIN STORAGE
+    mapping(string => Position) public positions;
+
+    // OWNER → LIST OF UUIDs
+    mapping(address => string[]) private positionsByOwner;
+
+    // ADMIN CONTROL
     address public admin;
 
-    modifier onlyAdmin() {
-        require(msg.sender == admin, "Not admin");
-        _;
-    }
+    // NEW: toggleable uniqueness requirement
+    bool public enforceUniqueUUID = true;
 
-    modifier onlyOwnerOf(bytes16 uuid) {
-        require(tokens[uuid].owner == msg.sender, "Not EQMT owner");
-        _;
-    }
 
+    //-------------------------
+    // EVENTS
+    //-------------------------
+    event EQMTMinted(string uuid, address owner);
+    event EQMTTransferred(string uuid, address from, address to);
+    event EQMTCredited(string uuid, uint256 amount);
+    event EQMTLiquidated(string uuid, address receiver, uint256 amount);
+    event EQMTClosed(string uuid);
+    event EQMTBurned(string uuid);
+
+
+    //-------------------------
+    // ADMIN ACCESS
+    //-------------------------
     constructor() {
         admin = msg.sender;
     }
 
-    struct EQMTData {
-        bytes16 uuid;
-        uint16 fcid;
-        uint64 bid;
-        string sanity;
-        uint256 baseequity;
-
-        address owner;
-        uint256 profitBalance;
-        bool active;
-        bool exists;
+    modifier onlyAdmin() {
+        require(msg.sender == admin, "Admin only");
+        _;
     }
 
-    mapping(bytes16 => EQMTData) public tokens;
+    modifier onlyOwner(string memory uuid) {
+        require(msg.sender == positions[uuid].owner, "Not position owner");
+        _;
+    }
 
+
+    //-------------------------
+    // ADMIN SETTINGS
+    //-------------------------
+    function setUniquenessEnforced(bool state) external onlyAdmin {
+        enforceUniqueUUID = state;
+    }
+
+
+    //-------------------------
+    // CREATE EQMT POSITION
+    //-------------------------
     function mintEQMT(
-        bytes16 uuid,
-        address owner,
+        string calldata uuid,
+        address owner_,
         uint16 fcid,
         uint64 bid,
-    string memory sanityJson,
+        string calldata sanity,
         uint256 baseequity
-    ) external onlyAdmin {
-        require(!tokens[uuid].exists, "UUID exists");
+    ) external onlyAdmin 
+    {
+        if (enforceUniqueUUID) {
+            require(positions[uuid].owner == address(0), "UUID exists");
+        }
 
-        tokens[uuid] = EQMTData({
-            uuid: uuid,
+        positions[uuid] = Position({
             fcid: fcid,
             bid: bid,
-            sanity: sanityJson,
+            sanity: sanity,
             baseequity: baseequity,
-            owner: owner,
-            profitBalance: 0,
+            equityBalance: 0,
             active: true,
-            exists: true
+            owner: owner_,
+            notes: ""
         });
 
-        emit EQMTCreated(uuid, owner, fcid, bid, baseequity);
+        positionsByOwner[owner_].push(uuid);
+
+        emit EQMTMinted(uuid, owner_);
     }
 
-    function creditProfit(bytes16 uuid) external payable onlyAdmin {
-        require(tokens[uuid].exists, "Missing");
-        require(tokens[uuid].active, "Inactive");
-        require(msg.value > 0, "Zero ETH");
 
-        tokens[uuid].profitBalance += msg.value;
-        emit EQMTProfitCredited(uuid, msg.value);
+    //-------------------------
+    // TRANSFER EQMT (admin)
+    //-------------------------
+    function clientPositionTransfer(string calldata uuid, address newOwner)
+        external
+        onlyAdmin
+    {
+        address oldOwner = positions[uuid].owner;
+        require(oldOwner != address(0), "Invalid UUID");
+
+        positions[uuid].owner = newOwner;
+        positionsByOwner[newOwner].push(uuid);
+
+        emit EQMTTransferred(uuid, oldOwner, newOwner);
     }
 
-    function withdrawProfit(bytes16 uuid) external onlyOwnerOf(uuid) {
-        uint256 amount = tokens[uuid].profitBalance;
-        require(amount > 0, "Empty");
 
-        tokens[uuid].profitBalance = 0;
+    //-------------------------
+    // CREDIT ETH TO EQMT
+    //-------------------------
+    function creditEQMT(string calldata uuid)
+        external
+        payable
+        onlyAdmin
+    {
+        require(positions[uuid].active, "Position closed");
 
-        (bool ok, ) = msg.sender.call{value: amount}("");
+        positions[uuid].equityBalance += msg.value;
+
+        emit EQMTCredited(uuid, msg.value);
+    }
+
+
+    //-------------------------
+    // LIQUIDATE / WITHDRAW
+    //-------------------------
+    function liquidateEQMT(string calldata uuid)
+        external
+        onlyOwner(uuid)
+    {
+        uint256 amount = positions[uuid].equityBalance;
+        require(amount > 0, "No funds");
+
+        positions[uuid].equityBalance = 0;
+
+        (bool ok, ) = payable(msg.sender).call{value: amount}("");
         require(ok, "ETH transfer failed");
 
-        emit EQMTProfitWithdrawn(uuid, amount);
+        emit EQMTLiquidated(uuid, msg.sender, amount);
     }
 
-    function updateSanity(bytes16 uuid, string memory newSanityJson) external onlyAdmin {
-        require(tokens[uuid].exists, "Missing");
-        tokens[uuid].sanity = newSanityJson;
-        emit EQMTSanityUpdated(uuid, newSanityJson);
-    }
 
-    function adminReassign(bytes16 uuid, address newOwner) external onlyAdmin {
-        require(tokens[uuid].exists, "Missing");
-        address old = tokens[uuid].owner;
-        tokens[uuid].owner = newOwner;
+    //-------------------------
+    // CLOSE POSITION
+    //-------------------------
+    function closeEQMT(string calldata uuid) external onlyAdmin {
+        require(positions[uuid].owner != address(0), "Invalid UUID");
+        positions[uuid].active = false;
 
-        emit EQMTReassigned(uuid, old, newOwner);
-    }
-
-    function closeEQMT(bytes16 uuid) external onlyAdmin {
-        require(tokens[uuid].exists, "Missing");
-        tokens[uuid].active = false;
         emit EQMTClosed(uuid);
     }
 
-    function burnEQMT(bytes16 uuid) external onlyAdmin {
-        require(tokens[uuid].exists, "Missing");
-        require(!tokens[uuid].active, "Must close first");
 
-        delete tokens[uuid];
+    //-------------------------
+    // BURN POSITION
+    //-------------------------
+    function burnEQMT(string calldata uuid) external onlyAdmin {
+        require(positions[uuid].owner != address(0), "Invalid UUID");
+
+        address owner_ = positions[uuid].owner;
+
+        delete positions[uuid];
+
         emit EQMTBurned(uuid);
+    }
+
+
+    //-------------------------
+    // SET ADMIN NOTES
+    //-------------------------
+    function setNotes(string calldata uuid, string calldata notes_)
+        external
+        onlyAdmin
+    {
+        positions[uuid].notes = notes_;
+    }
+
+
+    //-------------------------
+    // HELPERS
+    //-------------------------
+
+    // Get all UUIDs a wallet owns
+    function getPositionsByOwner(address wallet)
+        external
+        view
+        returns (string[] memory)
+    {
+        return positionsByOwner[wallet];
+    }
+
+    // Return sanity JSON
+    function getSanity(string calldata uuid)
+        external
+        view
+        returns (string memory)
+    {
+        return positions[uuid].sanity;
     }
 }
