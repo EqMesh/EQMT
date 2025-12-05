@@ -21,28 +21,33 @@ contract EQMTPositionNFT is ERC721, Ownable {
     constructor() ERC721("EqMesh Position Token", "EQMT") {}
 
     // ----------------------------------------------------------------------
-    // SOULBOUND (NON-TRANSFERABLE BY USERS)
-    // Using OZ v5 rules: override ONLY public transfer functions
+    // SOULBOUND RESTRICTIONS (OZ v5-compliant)
     // ----------------------------------------------------------------------
+    // This hook is called for MINT, BURN, and TRANSFER
+    // We allow:
+    // - Mint (from == 0)
+    // - Burn (to == 0)
+    // - Admin transfers only (msg.sender == owner())
+    // We reject:
+    // - Any user-initiated transfer
+    // ----------------------------------------------------------------------
+    function _update(
+        address to,
+        uint256 tokenId,
+        address auth
+    ) internal virtual override returns (address) {
+        
+        address from = _ownerOf(tokenId);
 
-    function approve(address, uint256) public pure override {
-        revert("EQMT positions are non-transferable");
-    }
+        bool isMint = from == address(0);
+        bool isBurn = to == address(0);
 
-    function setApprovalForAll(address, bool) public pure override {
-        revert("EQMT positions are non-transferable");
-    }
+        if (!isMint && !isBurn) {
+            // Block all user transfers
+            require(msg.sender == owner(), "Transfers restricted to admin only");
+        }
 
-    function transferFrom(address, address, uint256) public pure override {
-        revert("EQMT positions are non-transferable");
-    }
-
-    function safeTransferFrom(address, address, uint256) public pure override {
-        revert("EQMT positions are non-transferable");
-    }
-
-    function safeTransferFrom(address, address, uint256, bytes memory) public pure override {
-        revert("EQMT positions are non-transferable");
+        return super._update(to, tokenId, auth);
     }
 
     // ----------------------------------------------------------------------
@@ -60,10 +65,8 @@ contract EQMTPositionNFT is ERC721, Ownable {
     {
         require(_ownerOf(uuid) == address(0), "UUID already exists");
 
-        // Mint NFT
         _safeMint(owner_, uuid);
 
-        // Store metadata
         positions[uuid] = Position({
             fcid: fcid,
             bid: bid,
@@ -76,17 +79,17 @@ contract EQMTPositionNFT is ERC721, Ownable {
         positionOwner[uuid] = owner_;
     }
 
-    // Renamed from adminReassign — admin-controlled only
+    // Renamed from adminReassign -> clientPositionTransfer
     function clientPositionTransfer(uint256 uuid, address newOwner) external onlyOwner {
         require(_ownerOf(uuid) != address(0), "Invalid UUID");
 
         positionOwner[uuid] = newOwner;
 
-        // Admin transfer bypasses soulbound restrictions using internal update()
-        _update(newOwner, uuid, address(0));
+        // Admin transfer uses internal hook which allows owner() calls
+        _update(newOwner, uuid, msg.sender);
     }
 
-    // Renamed from creditProfit — admin deposits ETH into position
+    // Renamed from creditProfit -> creditEQMT
     function creditEQMT(uint256 uuid) external payable onlyOwner {
         require(_ownerOf(uuid) != address(0), "Invalid UUID");
         require(positions[uuid].active, "Position closed");
@@ -94,7 +97,7 @@ contract EQMTPositionNFT is ERC721, Ownable {
         positions[uuid].equityBalance += msg.value;
     }
 
-    // Renamed from withdrawProfit — user claims ETH
+    // Renamed from withdrawProfit -> liquidateEQMT
     function liquidateEQMT(uint256 uuid) external {
         require(_ownerOf(uuid) != address(0), "Invalid UUID");
         require(msg.sender == positionOwner[uuid], "Not position owner");
@@ -104,8 +107,8 @@ contract EQMTPositionNFT is ERC721, Ownable {
 
         positions[uuid].equityBalance = 0;
 
-        (bool sent, ) = payable(msg.sender).call{value: amount}("");
-        require(sent, "ETH transfer failed");
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "ETH transfer failed");
     }
 
     function closeEQMT(uint256 uuid) external onlyOwner {
