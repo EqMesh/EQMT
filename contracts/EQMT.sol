@@ -178,4 +178,50 @@ contract EQMT {
         positionExists(uuid)
     {
         delete positions[uuid];
-        emit EQMTBurned(keccak256(bytes(uuid
+        emit EQMTBurned(keccak256(bytes(uuid)), uuid);
+    }
+
+    // ------------------------ CLIENT FUNCTION ------------------------
+
+    function liquidateEQMT(string calldata uuid)
+        external
+        positionExists(uuid)
+    {
+        Position storage p = positions[uuid];
+
+        require(p.owner == msg.sender, "Not owner");
+        require(p.active, "Position closed");
+        require(p.equityBalance > 0, "No balance");
+
+        uint256 amount = p.equityBalance;
+        p.equityBalance = 0;
+
+        (bool sent, ) = msg.sender.call{value: amount}("");
+        require(sent, "Transfer failed");
+
+        emit EQMTLiquidated(
+            keccak256(bytes(uuid)),
+            uuid,
+            amount,
+            msg.sender
+        );
+    }
+
+    // ------------------------ VIEWS ------------------------
+
+    function getPosition(string calldata uuid)
+        external
+        view
+        returns (Position memory)
+    {
+        return positions[uuid];
+    }
+
+    function getActiveUUID(address wallet)
+        external
+        view
+        returns (string memory)
+    {
+        return activeUUID[wallet];
+    }
+}
