@@ -18,7 +18,6 @@ contract EQMTNFT3 is ERC721 {
         uint16 fcid;
         string sanity;
         string uuid;
-        uint256 baseequity;
         uint256 equityBalance;
         bool active;
         address owner;
@@ -35,7 +34,6 @@ contract EQMTNFT3 is ERC721 {
         address owner,
         uint16 fcid,
         string sanity,
-        uint256 baseequity,
         uint256 tokenId
     );
 
@@ -101,7 +99,6 @@ contract EQMTNFT3 is ERC721 {
                 '"image":"', TOKEN_IMAGE, '",',
                 '"fcid":', Strings.toString(p.fcid), ',',
                 '"sanity":"', p.sanity, '",',
-                '"baseequity":', Strings.toString(p.baseequity), ',',
                 '"equityBalance":', Strings.toString(p.equityBalance),
             "}"
         )
@@ -155,8 +152,7 @@ contract EQMTNFT3 is ERC721 {
         string calldata uuid,
         address wallet,
         uint16 fcid,
-        string calldata sanity,
-        uint256 baseequity
+        string calldata sanity
     )
         external
         onlyAdmin
@@ -174,7 +170,6 @@ contract EQMTNFT3 is ERC721 {
             fcid: fcid,
             sanity: sanity,
             uuid: uuid,
-            baseequity: baseequity,
             equityBalance: 0,
             active: true,
             owner: wallet,
@@ -190,7 +185,6 @@ contract EQMTNFT3 is ERC721 {
             wallet,
             fcid,
             sanity,
-            baseequity,
             tokenId
         );
     }
