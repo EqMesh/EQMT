@@ -9,22 +9,25 @@ contract EQMT {
         uint16 fcid;
         uint64 bid;
         string sanity;
+        string uuid;            // plaintext UUID kept here
         uint256 baseequity;
         uint256 equityBalance;
         bool active;
         address owner;
     }
 
-    // UUID → Position
-    mapping(bytes32 => Position) public positions;
+    // UUID (plaintext) → Position
+    mapping(string => Position) public positions;
 
-    // Wallet → active UUID
-    mapping(address => bytes32) public activeUUID;
+    // Wallet → currently active UUID (plaintext)
+    mapping(address => string) public activeUUID;
 
     // ------------------------ EVENTS ------------------------
-
+    // uuidHash = keccak256(bytes(uuid))
+    // allows fast filtering on-chain
     event EQMTMinted(
-        bytes32 indexed uuid,
+        bytes32 indexed uuidHash,
+        string uuid,
         address owner,
         uint16 fcid,
         uint64 bid,
@@ -33,25 +36,28 @@ contract EQMT {
     );
 
     event EQMTCredited(
-        bytes32 indexed uuid,
+        bytes32 indexed uuidHash,
+        string uuid,
         uint256 amount,
         string ref
     );
 
     event EQMTLiquidated(
-        bytes32 indexed uuid,
+        bytes32 indexed uuidHash,
+        string uuid,
         uint256 amount,
         address to
     );
 
     event EQMTOwnerChanged(
-        bytes32 indexed uuid,
+        bytes32 indexed uuidHash,
+        string uuid,
         address from,
         address to
     );
 
-    event EQMTClosed(bytes32 indexed uuid);
-    event EQMTBurned(bytes32 indexed uuid);
+    event EQMTClosed(bytes32 indexed uuidHash, string uuid);
+    event EQMTBurned(bytes32 indexed uuidHash, string uuid);
 
     // ------------------------ MODIFIERS ------------------------
 
@@ -60,7 +66,7 @@ contract EQMT {
         _;
     }
 
-    modifier positionExists(bytes32 uuid) {
+    modifier positionExists(string memory uuid) {
         require(positions[uuid].owner != address(0), "Position does not exist");
         _;
     }
@@ -71,9 +77,8 @@ contract EQMT {
 
     // ------------------------ ADMIN FUNCTIONS ------------------------
 
-    // Mint or overwrite a position
     function mintEQMT(
-        bytes32 uuid,
+        string calldata uuid,
         address wallet,
         uint16 fcid,
         uint64 bid,
@@ -83,18 +88,18 @@ contract EQMT {
         external
         onlyAdmin
     {
-        // Close existing active UUID for this wallet
-        bytes32 oldUUID = activeUUID[wallet];
-        if (oldUUID != bytes32(0) && positions[oldUUID].active) {
+        // Close existing active position
+        string memory oldUUID = activeUUID[wallet];
+        if (bytes(oldUUID).length > 0 && positions[oldUUID].active) {
             positions[oldUUID].active = false;
-            emit EQMTClosed(oldUUID);
+            emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID);
         }
 
-        // Create/overwrite position
         positions[uuid] = Position({
             fcid: fcid,
             bid: bid,
             sanity: sanity,
+            uuid: uuid,
             baseequity: baseequity,
             equityBalance: 0,
             active: true,
@@ -103,11 +108,18 @@ contract EQMT {
 
         activeUUID[wallet] = uuid;
 
-        emit EQMTMinted(uuid, wallet, fcid, bid, sanity, baseequity);
+        emit EQMTMinted(
+            keccak256(bytes(uuid)),
+            uuid,
+            wallet,
+            fcid,
+            bid,
+            sanity,
+            baseequity
+        );
     }
 
-    // Admin credits ETH into a position
-    function creditEQMT(bytes32 uuid, string calldata ref)
+    function creditEQMT(string calldata uuid, string calldata ref)
         external
         payable
         onlyAdmin
@@ -118,11 +130,15 @@ contract EQMT {
 
         positions[uuid].equityBalance += msg.value;
 
-        emit EQMTCredited(uuid, msg.value, ref);
+        emit EQMTCredited(
+            keccak256(bytes(uuid)),
+            uuid,
+            msg.value,
+            ref
+        );
     }
 
-    // Admin reassigns the position to a new wallet
-    function adminReassign(bytes32 uuid, address newWallet)
+    function adminReassign(string calldata uuid, address newWallet)
         external
         onlyAdmin
         positionExists(uuid)
@@ -130,76 +146,36 @@ contract EQMT {
         Position storage p = positions[uuid];
         address oldWallet = p.owner;
 
-        // Close new wallet's existing active position, if any
-        bytes32 existing = activeUUID[newWallet];
-        if (existing != bytes32(0) && positions[existing].active) {
-            positions[existing].active = false;
-            emit EQMTClosed(existing);
+        string memory oldUUID = activeUUID[newWallet];
+        if (bytes(oldUUID).length > 0 && positions[oldUUID].active) {
+            positions[oldUUID].active = false;
+            emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID);
         }
 
         p.owner = newWallet;
         activeUUID[newWallet] = uuid;
 
-        emit EQMTOwnerChanged(uuid, oldWallet, newWallet);
+        emit EQMTOwnerChanged(
+            keccak256(bytes(uuid)),
+            uuid,
+            oldWallet,
+            newWallet
+        );
     }
 
-    // Close (but keep stored)
-    function closeEQMT(bytes32 uuid)
+    function closeEQMT(string calldata uuid)
         external
         onlyAdmin
         positionExists(uuid)
     {
         positions[uuid].active = false;
-        emit EQMTClosed(uuid);
+        emit EQMTClosed(keccak256(bytes(uuid)), uuid);
     }
 
-    // Delete permanently
-    function burnEQMT(bytes32 uuid)
+    function burnEQMT(string calldata uuid)
         external
         onlyAdmin
         positionExists(uuid)
     {
         delete positions[uuid];
-        emit EQMTBurned(uuid);
-    }
-
-    // ------------------------ CLIENT FUNCTIONS ------------------------
-
-    // User withdraws full balance
-    function liquidateEQMT(bytes32 uuid)
-        external
-        positionExists(uuid)
-    {
-        Position storage p = positions[uuid];
-
-        require(p.owner == msg.sender, "Not owner");
-        require(p.active, "Position closed");
-        require(p.equityBalance > 0, "No balance");
-
-        uint256 amount = p.equityBalance;
-        p.equityBalance = 0;
-
-        (bool sent, ) = msg.sender.call{value: amount}("");
-        require(sent, "Transfer failed");
-
-        emit EQMTLiquidated(uuid, amount, msg.sender);
-    }
-
-    // ------------------------ VIEW HELPERS ------------------------
-
-    function getPosition(bytes32 uuid)
-        external
-        view
-        returns (Position memory)
-    {
-        return positions[uuid];
-    }
-
-    function getActiveUUID(address wallet)
-        external
-        view
-        returns (bytes32)
-    {
-        return activeUUID[wallet];
-    }
-}
+        emit EQMTBurned(keccak256(bytes(uuid
