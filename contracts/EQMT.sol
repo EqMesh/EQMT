@@ -39,12 +39,59 @@ contract EQMT {
     // EVENTS
     event EQMTMinted(string uuid, address owner, uint16 fcid, uint64 bid);
     event EQMTTransferred(string uuid, address oldOwner, address newOwner);
-    event EQMTCredited(string uuid, uint256 amountEth);
-    event EQMTLiquidated(string uuid, address owner, uint256 amount);
+    event EQMTCredited(string uuid, uint256 amountWei);
+    event EQMTLiquidated(string uuid, address owner, uint256 amountWei);
     event EQMTClosed(string uuid);
     event EQMTBurned(string uuid);
 
+    // ------------------------------------------------------------
+    // DECIMAL STRING PARSER (supports up to 18 decimals)
+    // ------------------------------------------------------------
+    function parseEthString(string memory ethStr) public pure returns (uint256) {
+        bytes memory s = bytes(ethStr);
+        require(s.length > 0, "Empty amount");
+
+        uint256 integerPart = 0;
+        uint256 fractionalPart = 0;
+        uint256 fractionalLength = 0;
+
+        bool hasDecimal = false;
+
+        for (uint256 i = 0; i < s.length; i++) {
+            bytes1 c = s[i];
+
+            if (c == ".") {
+                require(!hasDecimal, "Multiple decimals");
+                hasDecimal = true;
+                continue;
+            }
+
+            require(c >= "0" && c <= "9", "Invalid character");
+
+            uint8 digit = uint8(c) - 48;
+
+            if (!hasDecimal) {
+                integerPart = integerPart * 10 + digit;
+            } else {
+                // Only up to 18 decimals allowed
+                require(fractionalLength < 18, "Too many decimals");
+                fractionalPart = fractionalPart * 10 + digit;
+                fractionalLength++;
+            }
+        }
+
+        // Scale fractional part to wei
+        if (fractionalLength < 18) {
+            fractionalPart *= 10 ** (18 - fractionalLength);
+        }
+
+        uint256 totalWei = integerPart * 1e18 + fractionalPart;
+        return totalWei;
+    }
+
+    // ------------------------------------------------------------
     // CREATE POSITION
+    // ------------------------------------------------------------
     function mintEQMT(
         string calldata uuid,
         address owner_,
@@ -69,7 +116,9 @@ contract EQMT {
         emit EQMTMinted(uuid, owner_, fcid, bid);
     }
 
-    // TRANSFER POSITION (ADMIN)
+    // ------------------------------------------------------------
+    // ADMIN TRANSFER POSITION
+    // ------------------------------------------------------------
     function clientPositionTransfer(string calldata uuid, address newOwner)
         external
         onlyAdmin
@@ -81,29 +130,36 @@ contract EQMT {
         emit EQMTTransferred(uuid, oldOwner, newOwner);
     }
 
-    // CREDIT POSITION WITH REAL ETH (ETH units supported)
-    function creditEQMT(string calldata uuid, uint256 amountEth)
+    // ------------------------------------------------------------
+    // CREDIT POSITION WITH REAL ETH (string amount)
+    // ------------------------------------------------------------
+    function creditEQMT(string calldata uuid, string calldata amountEthString)
         external
         payable
         onlyAdmin
         positionExists(uuid)
     {
         require(positions[uuid].active, "Position closed");
-        require(msg.value == amountEth, "Amount mismatch");
 
-        positions[uuid].equityBalance += amountEth;
+        uint256 parsedWei = parseEthString(amountEthString);
 
-        emit EQMTCredited(uuid, amountEth);
+        require(msg.value == parsedWei, "Amount mismatch");
+
+        positions[uuid].equityBalance += parsedWei;
+
+        emit EQMTCredited(uuid, parsedWei);
     }
 
-    // CLIENT LIQUIDATION OF REAL ETH
+    // ------------------------------------------------------------
+    // LIQUIDATE POSITION (OWNER WITHDRAWS ETH)
+    // ------------------------------------------------------------
     function liquidateEQMT(string calldata uuid)
         external
         positionExists(uuid)
         onlyOwner(uuid)
     {
         uint256 amount = positions[uuid].equityBalance;
-        require(amount > 0, "No funds available");
+        require(amount > 0, "No funds");
 
         positions[uuid].equityBalance = 0;
 
@@ -113,7 +169,9 @@ contract EQMT {
         emit EQMTLiquidated(uuid, msg.sender, amount);
     }
 
-    // CLOSE POSITION (ADMIN)
+    // ------------------------------------------------------------
+    // ADMIN ACTIONS
+    // ------------------------------------------------------------
     function closeEQMT(string calldata uuid)
         external
         onlyAdmin
@@ -123,7 +181,6 @@ contract EQMT {
         emit EQMTClosed(uuid);
     }
 
-    // BURN POSITION (ADMIN)
     function burnEQMT(string calldata uuid)
         external
         onlyAdmin
