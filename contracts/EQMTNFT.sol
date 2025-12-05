@@ -18,7 +18,7 @@ contract EQMTNFT3 is ERC721 {
         uint16 fcid;
         string sanity;
         string uuid;
-        uint256 equityBalance;
+        uint256 equity;
         bool active;
         address owner;
         uint256 tokenId;
@@ -99,7 +99,7 @@ contract EQMTNFT3 is ERC721 {
                 '"image":"', TOKEN_IMAGE, '",',
                 '"fcid":', Strings.toString(p.fcid), ',',
                 '"sanity":"', p.sanity, '",',
-                '"equityBalance":', Strings.toString(p.equityBalance),
+                '"equity":"eth attached",',
             "}"
         )
     );
@@ -170,7 +170,7 @@ contract EQMTNFT3 is ERC721 {
             fcid: fcid,
             sanity: sanity,
             uuid: uuid,
-            equityBalance: 0,
+            equity: 0,
             active: true,
             owner: wallet,
             tokenId: tokenId
@@ -198,7 +198,7 @@ contract EQMTNFT3 is ERC721 {
         require(positions[uuid].active, "Position closed");
         require(msg.value > 0, "No ETH sent");
 
-        positions[uuid].equityBalance += msg.value;
+        positions[uuid].equity += msg.value;
 
         emit EQMTCredited(
             keccak256(bytes(uuid)),
@@ -267,10 +267,10 @@ contract EQMTNFT3 is ERC721 {
 
         require(p.owner == msg.sender, "Not owner");
         require(p.active, "Position closed");
-        require(p.equityBalance > 0, "No balance");
+        require(p.equity > 0, "No balance");
 
-        uint256 amount = p.equityBalance;
-        p.equityBalance = 0;
+        uint256 amount = p.equity;
+        p.equity = 0;
 
         (bool sent, ) = msg.sender.call{value: amount}("");
         require(sent, "Transfer failed");
