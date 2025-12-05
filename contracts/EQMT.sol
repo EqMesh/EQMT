@@ -1,20 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.21;
 
-/*
- * EqMesh EQMT Position Registry
- * ----------------------------------
- * Transparent ledger for:
- *  - UUID-based client positions
- *  - Off-chain references (fcid, bid, sanity, base equity)
- *  - Real ETH crediting for proof of transaction
- *  - Client-controlled liquidation (withdrawal)
- *  - Admin-controlled management
- *
- * Not ERC-20 or ERC-721.
- * Pure position registry.
- */
-
 contract EQMT {
 
     struct Position {
@@ -50,20 +36,15 @@ contract EQMT {
         _;
     }
 
-    // ------------------------------------------------------------
     // EVENTS
-    // ------------------------------------------------------------
-
     event EQMTMinted(string uuid, address owner, uint16 fcid, uint64 bid);
     event EQMTTransferred(string uuid, address oldOwner, address newOwner);
-    event EQMTCredited(string uuid, uint256 amount);
+    event EQMTCredited(string uuid, uint256 amountEth);
     event EQMTLiquidated(string uuid, address owner, uint256 amount);
     event EQMTClosed(string uuid);
     event EQMTBurned(string uuid);
 
-    // ------------------------------------------------------------
     // CREATE POSITION
-    // ------------------------------------------------------------
     function mintEQMT(
         string calldata uuid,
         address owner_,
@@ -88,10 +69,7 @@ contract EQMT {
         emit EQMTMinted(uuid, owner_, fcid, bid);
     }
 
-    // ------------------------------------------------------------
-    // ADMIN-ONLY POSITION TRANSFER
-    // (Renamed from adminReassign)
-    // ------------------------------------------------------------
+    // TRANSFER POSITION (ADMIN)
     function clientPositionTransfer(string calldata uuid, address newOwner)
         external
         onlyAdmin
@@ -103,28 +81,22 @@ contract EQMT {
         emit EQMTTransferred(uuid, oldOwner, newOwner);
     }
 
-    // ------------------------------------------------------------
-    // CREDIT POSITION WITH REAL ETH
-    // (Renamed from creditProfit)
-    // ------------------------------------------------------------
-    function creditEQMT(string calldata uuid, uint256 amount)
+    // CREDIT POSITION WITH REAL ETH (ETH units supported)
+    function creditEQMT(string calldata uuid, uint256 amountEth)
         external
         payable
         onlyAdmin
         positionExists(uuid)
     {
         require(positions[uuid].active, "Position closed");
-        require(msg.value == amount, "Amount mismatch");
+        require(msg.value == amountEth, "Amount mismatch");
 
-        positions[uuid].equityBalance += amount;
+        positions[uuid].equityBalance += amountEth;
 
-        emit EQMTCredited(uuid, amount);
+        emit EQMTCredited(uuid, amountEth);
     }
 
-    // ------------------------------------------------------------
-    // CLIENT WITHDRAWAL OF REAL ETH
-    // (Renamed from withdrawProfit)
-    // ------------------------------------------------------------
+    // CLIENT LIQUIDATION OF REAL ETH
     function liquidateEQMT(string calldata uuid)
         external
         positionExists(uuid)
@@ -141,9 +113,7 @@ contract EQMT {
         emit EQMTLiquidated(uuid, msg.sender, amount);
     }
 
-    // ------------------------------------------------------------
-    // POSITION ADMINISTRATION
-    // ------------------------------------------------------------
+    // CLOSE POSITION (ADMIN)
     function closeEQMT(string calldata uuid)
         external
         onlyAdmin
@@ -153,6 +123,7 @@ contract EQMT {
         emit EQMTClosed(uuid);
     }
 
+    // BURN POSITION (ADMIN)
     function burnEQMT(string calldata uuid)
         external
         onlyAdmin
