@@ -16,7 +16,6 @@ contract EQMTNFT3 is ERC721 {
 
     struct Position {
         uint16 fcid;
-        uint64 bid;
         string sanity;
         string uuid;
         uint256 baseequity;
@@ -35,7 +34,6 @@ contract EQMTNFT3 is ERC721 {
         string uuid,
         address owner,
         uint16 fcid,
-        uint64 bid,
         string sanity,
         uint256 baseequity,
         uint256 tokenId
@@ -86,32 +84,36 @@ contract EQMTNFT3 is ERC721 {
     // ERC721 METADATA — tokenURI()
     // --------------------------------------------------------
     function tokenURI(uint256 tokenId)
-        public
-        view
-        override
-        returns (string memory)
-    {
-        require(_exists(tokenId), "Invalid token");
+    public
+    view
+    override
+    returns (string memory)
+{
+    require(_exists(tokenId), "Invalid token");
+    string memory uuid = tokenIdToUUID[tokenId];
+    Position memory p = positions[uuid];
 
-     //   TokenInfo memory t = info[tokenId];
+    string memory json = string(
+        abi.encodePacked(
+            "{",
+                '"name":"EqMesh Strategy Token #', Strings.toString(tokenId), '",',
+                '"description":"EQMT are non-transferable, the ETH comes with it are yours to keep!",',
+                '"image":"', TOKEN_IMAGE, '",',
+                '"fcid":', Strings.toString(p.fcid), ',',
+                '"sanity":"', p.sanity, '",',
+                '"baseequity":', Strings.toString(p.baseequity), ',',
+                '"equityBalance":', Strings.toString(p.equityBalance),
+            "}"
+        )
+    );
 
-        string memory json = string(
-            abi.encodePacked(
-                "{",
-                    '"name":"EqMesh Strategy Token #', Strings.toString(tokenId), '",',
-                    '"description":"EQMT are non-transferable, the ETH comes with it are yours to keep!",',
-                    '"image":"', TOKEN_IMAGE, '",',
-                    
-                "}"
-            )
-        );
+    return string(
+        abi.encodePacked(
+            "data:application/json;base64,",
+            Base64.encode(bytes(json))
+        )
+    );
 
-        return string(
-            abi.encodePacked(
-                "data:application/json;base64,",
-                Base64.encode(bytes(json))
-            )
-        );
     }
         
                 // Solution: Remove override and implement custom transfer blocking
@@ -153,7 +155,6 @@ contract EQMTNFT3 is ERC721 {
         string calldata uuid,
         address wallet,
         uint16 fcid,
-        uint64 bid,
         string calldata sanity,
         uint256 baseequity
     )
@@ -171,7 +172,6 @@ contract EQMTNFT3 is ERC721 {
 
         positions[uuid] = Position({
             fcid: fcid,
-            bid: bid,
             sanity: sanity,
             uuid: uuid,
             baseequity: baseequity,
@@ -189,7 +189,6 @@ contract EQMTNFT3 is ERC721 {
             uuid,
             wallet,
             fcid,
-            bid,
             sanity,
             baseequity,
             tokenId
