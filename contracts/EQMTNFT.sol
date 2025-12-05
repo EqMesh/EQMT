@@ -1,254 +1,336 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.21;
+pragma solidity ^0.8.4;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts@4.7.0/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts@4.7.0/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts@4.7.0/access/Ownable.sol";
+import "@openzeppelin/contracts@4.7.0/utils/Counters.sol";
+import "@openzeppelin/contracts@4.7.0/utils/Strings.sol";
+import "@openzeppelin/contracts@4.7.0/utils/Base64.sol";
 
-contract LockedValueNFT is ERC721, Ownable, ReentrancyGuard {
-    uint256 private _nextId;
+contract EQMTNFT3 is ERC721 {
+    address public admin;
+    string private constant TOKEN_IMAGE =
+        "https://eqmesh.com/static/images/logo-250.png";
+    uint256 private _tokenIdCounter;
 
-    // --------------------------------------------------------
-    // DATA STRUCTURES
-    // --------------------------------------------------------
-    struct TokenInfo {
-        string fcid;       // permanent at mint
-        string sanity;     // admin-updatable
-        string strategy;   // admin-updatable
+    struct Position {
+        uint16 fcid;
+        uint64 bid;
+        string sanity;
+        string uuid;
+        uint256 baseequity;
+        uint256 equityBalance;
+        bool active;
+        address owner;
+        uint256 tokenId;
     }
 
-    // tokenId → metadata
-    mapping(uint256 => TokenInfo) public info;
+    mapping(string => Position) public positions;
+    mapping(address => string) public activeUUID;
+    mapping(uint256 => string) public tokenIdToUUID;
 
-    // tokenId → ETH balance
-    mapping(uint256 => uint256) public balanceOfToken;
+    event EQMTMinted(
+        bytes32 indexed uuidHash,
+        string uuid,
+        address owner,
+        uint16 fcid,
+        uint64 bid,
+        string sanity,
+        uint256 baseequity,
+        uint256 tokenId
+    );
 
-    // --------------------------------------------------------
-    // EVENTS
-    // --------------------------------------------------------
-    event TokenCredited(uint256 indexed tokenId, uint256 amount, address indexed admin);
-    event TokenLiquidated(uint256 indexed tokenId, uint256 amount, address indexed owner);
-    event NFTOwnershipMoved(uint256 indexed tokenId, address indexed from, address indexed to);
-    event SanityUpdated(uint256 indexed tokenId, string newSanity);
-    event StrategyUpdated(uint256 indexed tokenId, string newStrategy);
-    event TokenBurned(uint256 indexed tokenId, uint256 ethReturnedToAdmin);
+    event EQMTCredited(
+        bytes32 indexed uuidHash,
+        string uuid,
+        uint256 amount,
+        string ref,
+        uint256 tokenId
+    );
 
-    // --------------------------------------------------------
-    // CONSTRUCTOR
-    // --------------------------------------------------------
-    constructor()
-        ERC721("LockedValueNFT", "LVNFT")
-        Ownable(msg.sender)
-    {}
-
-    // --------------------------------------------------------
-    // INTERNAL CHECK
-    // --------------------------------------------------------
-    function _tokenExists(uint256 tokenId) internal view returns (bool) {
-        return _ownerOf(tokenId) != address(0);
-    }
-
-    // --------------------------------------------------------
-    // MINTING
-    // --------------------------------------------------------
-    function mint(
+    event EQMTLiquidated(
+        bytes32 indexed uuidHash,
+        string uuid,
+        uint256 amount,
         address to,
-        string memory fcid,
-        string memory sanityInitial,
-        string memory strategyInitial
+        uint256 tokenId
+    );
+
+    event EQMTOwnerChanged(
+        bytes32 indexed uuidHash,
+        string uuid,
+        address from,
+        address to,
+        uint256 tokenId
+    );
+
+    event EQMTClosed(bytes32 indexed uuidHash, string uuid, uint256 tokenId);
+    event EQMTBurned(bytes32 indexed uuidHash, string uuid, uint256 tokenId);
+
+    modifier onlyAdmin() {
+        require(msg.sender == admin, "Admin only");
+        _;
+    }
+
+    modifier positionExists(string memory uuid) {
+        require(positions[uuid].owner != address(0), "Position does not exist");
+        _;
+    }
+
+    constructor() ERC721("EqMesh Strategy Token", "EQMT") {
+        admin = msg.sender;
+    }
+
+    // --------------------------------------------------------
+    // ERC721 METADATA — tokenURI()
+    // --------------------------------------------------------
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        override
+        returns (string memory)
+    {
+        require(_exists(tokenId), "Invalid token");
+
+     //   TokenInfo memory t = info[tokenId];
+
+        string memory json = string(
+            abi.encodePacked(
+                "{",
+                    '"name":"EqMesh Strategy Token #', Strings.toString(tokenId), '",',
+                    '"description":"EQMT are non-transferable, the ETH comes with it are yours to keep!",',
+                    '"image":"', TOKEN_IMAGE, '",',
+                    
+                "}"
+            )
+        );
+
+        return string(
+            abi.encodePacked(
+                "data:application/json;base64,",
+                Base64.encode(bytes(json))
+            )
+        );
+    }
+        
+                // Solution: Remove override and implement custom transfer blocking
+ function _beforeTokenTransfer(
+    address from, 
+    address to, 
+    uint256 tokenId
+    ) internal override virtual {
+    require(from == address(0), "Err: token transfer is BLOCKED"); 
+    super._beforeTokenTransfer(from, to, tokenId);  
+    }
+
+    // Required for ERC721 compliance
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
+
+    // Override transfer functions to block transfers
+    function _transfer(
+        address from,
+        address to,
+        uint256 tokenId
+    ) internal virtual override {
+        require(from == address(0) || to == address(0), "Transfers disabled");
+        super._transfer(from, to, tokenId);
+    }
+
+    function _safeTransfer(
+        address from,
+        address to,
+        uint256 tokenId,
+        bytes memory _data
+    ) internal virtual override {
+        require(from == address(0) || to == address(0), "Transfers disabled");
+        super._safeTransfer(from, to, tokenId, _data);
+    }
+
+    function mintEQMT(
+        string calldata uuid,
+        address wallet,
+        uint16 fcid,
+        uint64 bid,
+        string calldata sanity,
+        uint256 baseequity
     )
         external
-        onlyOwner
-        returns (uint256)
+        onlyAdmin
     {
-        uint256 tokenId = ++_nextId;
+        string memory oldUUID = activeUUID[wallet];
+        if (bytes(oldUUID).length > 0 && positions[oldUUID].active) {
+            positions[oldUUID].active = false;
+            emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID, positions[oldUUID].tokenId);
+        }
 
-        _mint(to, tokenId);
+        uint256 tokenId = _tokenIdCounter++;
+        _safeMint(wallet, tokenId);
 
-        info[tokenId] = TokenInfo({
+        positions[uuid] = Position({
             fcid: fcid,
-            sanity: sanityInitial,
-            strategy: strategyInitial
+            bid: bid,
+            sanity: sanity,
+            uuid: uuid,
+            baseequity: baseequity,
+            equityBalance: 0,
+            active: true,
+            owner: wallet,
+            tokenId: tokenId
         });
 
-        return tokenId;
-    }
+        activeUUID[wallet] = uuid;
+        tokenIdToUUID[tokenId] = uuid;
 
-    // --------------------------------------------------------
-    // ADMIN — Update sanity
-    // --------------------------------------------------------
-    function updateSanity(uint256 tokenId, string calldata newSanity)
-        external
-        onlyOwner
-    {
-        require(_tokenExists(tokenId), "Invalid token");
-
-        info[tokenId].sanity = newSanity;
-
-        emit SanityUpdated(tokenId, newSanity);
-    }
-
-    // --------------------------------------------------------
-    // ADMIN — Update strategy
-    // --------------------------------------------------------
-    function updateStrategy(uint256 tokenId, string calldata newStrategy)
-        external
-        onlyOwner
-    {
-        require(_tokenExists(tokenId), "Invalid token");
-
-        info[tokenId].strategy = newStrategy;
-
-        emit StrategyUpdated(tokenId, newStrategy);
-    }
-
-    // --------------------------------------------------------
-    // VIEW — Get all token data
-    // --------------------------------------------------------
-    function getTokenData(uint256 tokenId)
-        external
-        view
-        returns (
-            string memory fcid,
-            string memory sanity,
-            string memory strategy,
-            uint256 ethBalance,
-            address ownerAddress
-        )
-    {
-        require(_tokenExists(tokenId), "Invalid token");
-
-        TokenInfo memory t = info[tokenId];
-
-        return (
-            t.fcid,
-            t.sanity,
-            t.strategy,
-            balanceOfToken[tokenId],
-            ownerOf(tokenId)
+        emit EQMTMinted(
+            keccak256(bytes(uuid)),
+            uuid,
+            wallet,
+            fcid,
+            bid,
+            sanity,
+            baseequity,
+            tokenId
         );
     }
 
-    // --------------------------------------------------------
-    // ADMIN — Move ownership (soulbound for users)
-    // --------------------------------------------------------
-    function adminMoveToken(uint256 tokenId, address newOwner)
-        external
-        onlyOwner
-    {
-        require(_tokenExists(tokenId), "Invalid token");
-
-        address oldOwner = ownerOf(tokenId);
-        _transfer(oldOwner, newOwner, tokenId);
-
-        emit NFTOwnershipMoved(tokenId, oldOwner, newOwner);
-    }
-
-    // --------------------------------------------------------
-    // ADMIN — CREDIT TOKEN (deposit ETH)
-    // --------------------------------------------------------
-    function creditToken(uint256 tokenId)
+    function creditEQMT(string calldata uuid, string calldata ref)
         external
         payable
-        onlyOwner
+        onlyAdmin
+        positionExists(uuid)
     {
-        require(_tokenExists(tokenId), "Invalid token");
+        require(positions[uuid].active, "Position closed");
         require(msg.value > 0, "No ETH sent");
 
-        balanceOfToken[tokenId] += msg.value;
+        positions[uuid].equityBalance += msg.value;
 
-        emit TokenCredited(tokenId, msg.value, msg.sender);
+        emit EQMTCredited(
+            keccak256(bytes(uuid)),
+            uuid,
+            msg.value,
+            ref,
+            positions[uuid].tokenId
+        );
     }
 
-    // --------------------------------------------------------
-    // OWNER — LIQUIDATE TOKEN (withdraw ETH to owner ONLY)
-    // --------------------------------------------------------
-    function liquidateToken(uint256 tokenId, uint256 amount)
+    function adminReassign(string calldata uuid, address newWallet)
         external
-        nonReentrant
+        onlyAdmin
+        positionExists(uuid)
     {
-        require(_tokenExists(tokenId), "Invalid token");
+        Position storage p = positions[uuid];
+        address oldWallet = p.owner;
 
-        address ownerAddr = ownerOf(tokenId);
-
-        require(msg.sender == ownerAddr, "Not NFT owner");
-        require(amount > 0, "Amount must be >0");
-        require(balanceOfToken[tokenId] >= amount, "Insufficient balance");
-
-        balanceOfToken[tokenId] -= amount;
-
-        (bool ok, ) = ownerAddr.call{value: amount}("");
-        require(ok, "ETH transfer failed");
-
-        emit TokenLiquidated(tokenId, amount, ownerAddr);
-    }
-
-    // --------------------------------------------------------
-    // ADMIN — BURN TOKEN & reclaim all ETH
-    // --------------------------------------------------------
-    function adminBurn(uint256 tokenId)
-        external
-        onlyOwner
-        nonReentrant
-    {
-        require(_tokenExists(tokenId), "Invalid token");
-
-        uint256 amount = balanceOfToken[tokenId];
-        balanceOfToken[tokenId] = 0;
-
-        // Refund ETH to admin
-        if (amount > 0) {
-            (bool ok, ) = owner().call{value: amount}("");
-            require(ok, "ETH refund failed");
+        string memory oldUUID = activeUUID[newWallet];
+        if (bytes(oldUUID).length > 0 && positions[oldUUID].active) {
+            positions[oldUUID].active = false;
+            emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID, positions[oldUUID].tokenId);
         }
 
-        delete info[tokenId];
+        // Use internal transfer which we've overridden
+        super._transfer(oldWallet, newWallet, p.tokenId);
 
-        _burn(tokenId);
+        p.owner = newWallet;
+        activeUUID[newWallet] = uuid;
 
-        emit TokenBurned(tokenId, amount);
+        emit EQMTOwnerChanged(
+            keccak256(bytes(uuid)),
+            uuid,
+            oldWallet,
+            newWallet,
+            p.tokenId
+        );
     }
 
-    // --------------------------------------------------------
-    // SOULBOUND — Block transfers for users
-    // --------------------------------------------------------
-    function _update(address to, uint256 tokenId, address auth)
-        internal
-        virtual
-        override
+    function closeEQMT(string calldata uuid)
+        external
+        onlyAdmin
+        positionExists(uuid)
+    {
+        positions[uuid].active = false;
+        emit EQMTClosed(keccak256(bytes(uuid)), uuid, positions[uuid].tokenId);
+    }
+
+    function burnEQMT(string calldata uuid)
+        external
+        onlyAdmin
+        positionExists(uuid)
+    {
+        uint256 tokenId = positions[uuid].tokenId;
+        _burn(tokenId);
+        delete tokenIdToUUID[tokenId];
+        delete positions[uuid];
+        emit EQMTBurned(keccak256(bytes(uuid)), uuid, tokenId);
+    }
+
+    function liquidateEQMT(string calldata uuid)
+        external
+        positionExists(uuid)
+    {
+        Position storage p = positions[uuid];
+
+        require(p.owner == msg.sender, "Not owner");
+        require(p.active, "Position closed");
+        require(p.equityBalance > 0, "No balance");
+
+        uint256 amount = p.equityBalance;
+        p.equityBalance = 0;
+
+        (bool sent, ) = msg.sender.call{value: amount}("");
+        require(sent, "Transfer failed");
+
+        emit EQMTLiquidated(
+            keccak256(bytes(uuid)),
+            uuid,
+            amount,
+            msg.sender,
+            p.tokenId
+        );
+    }
+
+    function getPosition(string calldata uuid)
+        external
+        view
+        returns (Position memory)
+    {
+        return positions[uuid];
+    }
+
+    function getActiveUUID(address wallet)
+        external
+        view
+        returns (string memory)
+    {
+        return activeUUID[wallet];
+    }
+
+    function getTokenIdForUUID(string calldata uuid)
+        external
+        view
+        returns (uint256)
+    {
+        return positions[uuid].tokenId;
+    }
+
+    function getUUIDForTokenId(uint256 tokenId)
+        external
+        view
+        returns (string memory)
+    {
+        return tokenIdToUUID[tokenId];
+    }
+
+    function ownerOfTokenId(uint256 tokenId)
+        external
+        view
         returns (address)
     {
-        address from = _ownerOf(tokenId);
-
-        // If caller is not admin AND token is not being minted, block transfer
-        if (auth != owner()) {
-            if (from != address(0)) {
-                revert("This NFT is non-transferable");
-            }
-        }
-
-        return super._update(to, tokenId, auth);
+        return ownerOf(tokenId);
     }
 
-    // --------------------------------------------------------
-    // BLOCK APPROVALS
-    // --------------------------------------------------------
-    function approve(address, uint256) public pure override {
-        revert("Approvals disabled");
-    }
 
-    function setApprovalForAll(address, bool) public pure override {
-        revert("Approvals disabled");
-    }
 
-    // --------------------------------------------------------
-    // BLOCK DIRECT ETH SENDS
-    // --------------------------------------------------------
-    receive() external payable {
-        revert("Direct ETH not allowed; use creditToken");
-    }
-
-    fallback() external payable {
-        revert("Direct ETH not allowed; use creditToken");
-    }
 }
