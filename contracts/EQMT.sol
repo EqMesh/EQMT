@@ -249,30 +249,39 @@ event EQMTMinted(
         emit EQMTBurned(keccak256(bytes(uuid)), uuid, tokenId);
     }
 
-    function liquidateEQMT(string calldata uuid)
-        external
-        strategyExists(uuid)
-    {
-        Strategy storage p = strategies[uuid];
+// function liquidateEQMT(string calldata uuid, uint256 amount, string calldata ref)
+function liquidateEQMT(string calldata uuid, uint256 amount)
+    external
+    strategyExists(uuid)
+{
+    Strategy storage s = strategies[uuid];
 
-        require(p.owner == msg.sender, "Not owner");
-        require(p.active, "Strategy closed");
-        require(p.equity > 0, "No balance");
+    // Find token ID associated with this strategy UUID
+    uint256 tokenId = strategies[uuid].tokenId;
 
-        uint256 amount = p.equity;
-        p.equity = 0;
+    require(tokenId != 0, "Invalid token");
+    require(ownerOf(tokenId) == msg.sender, "Not token owner");
+    require(s.active, "Strategy not active");
+    require(amount > 0, "Amount must be > 0");
+    require(s.equity >= amount, "Insufficient equity");
 
-        (bool sent, ) = msg.sender.call{value: amount}("");
-        require(sent, "Transfer failed");
+    // Deduct equity
+    s.equity -= amount;
 
-        emit EQMTLiquidated(
-            keccak256(bytes(uuid)),
-            uuid,
-            amount,
-            msg.sender,
-            p.tokenId
-        );
-    }
+    // Send ETH to NFT owner
+    (bool ok, ) = msg.sender.call{value: amount}("");
+    require(ok, "ETH transfer failed");
+
+    // Emit event logging turned off for now
+    emit EQMTLiquidated(
+      keccak256(bytes(uuid)),
+     uuid,
+   amount,
+    msg.sender,
+   tokenId
+   );
+     
+}
 
     function getStrategy(string calldata uuid)
         external
