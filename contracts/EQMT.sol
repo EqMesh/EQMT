@@ -29,26 +29,10 @@ function tokenURI(uint256 tokenId)
     returns (string memory)
 {
     require(_exists(tokenId), "Invalid token");
-    string memory uuid = tokenIdToUUID[tokenId];
-    Strategy memory p = strategies[uuid];
-
-    string memory json = string(
-        abi.encodePacked(
-            "{",
-                '"name":"EqMesh Strategy Token #', Strings.toString(tokenId), '",',
-                '"description":"EQMT is a eth-backed Strategy token. Each token represents a financial Strategy run on eqmesh.com.",',
-                '"image":"https://eqmesh.com/static/images/logo-250.png",',
-                '"external_url":"https://eqmesh.com/token",',
-                '"attributes":[',
-                    '{"trait_type":"Sanity","value":"', p.sanity, '"},',
-                "]",
-            "}"
-        )
-    );
+    // Construct the URI using contract address + tokenId
     return string(
         abi.encodePacked(
-            "data:application/json;base64,",
-                Base64.encode(bytes(json))
+            "https://eqmesh.com/token/", address(this), ".json"
         )
     );
 }
