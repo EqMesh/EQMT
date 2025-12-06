@@ -32,7 +32,7 @@ function tokenURI(uint256 tokenId)
     // Construct the URI using contract address + tokenId
     return string(
         abi.encodePacked(
-            "https://eqmesh.com/token/", address(this), ".json"
+            "https://eqmesh.com/token/", Strings.toString(uint256(uint160(address(this)))), ".json"
         )
     );
 }
@@ -233,7 +233,7 @@ event EQMTMinted(
         emit EQMTBurned(keccak256(bytes(uuid)), uuid, tokenId);
     }
 
-// function liquidateEQMT(string calldata uuid, uint256 amount, string calldata ref)
+/*
 function liquidateEQMT(string calldata uuid, uint256 amount)
     external
     strategyExists(uuid)
@@ -266,8 +266,46 @@ function liquidateEQMT(string calldata uuid, uint256 amount)
    );
      
 }
+*/
 
-    function getStrategy(string calldata uuid)
+function liquidateEQMT(uint256 tokenId) external {
+    require(_exists(tokenId), "Invalid token");
+    require(ownerOf(tokenId) == msg.sender, "Not token owner");
+
+    // Get the UUID associated with this tokenId
+    string memory uuid = tokenIdToUUID[tokenId];
+    require(bytes(uuid).length > 0, "UUID missing");
+
+    Strategy storage s = strategies[uuid];
+
+    require(s.active, "Strategy not active");
+    require(s.equity > 0, "No equity to liquidate");
+
+    uint256 amount = s.equity;
+
+    // Prevent reentrancy
+    s.equity = 0;
+
+    // Transfer ETH to NFT owner
+    (bool ok, ) = msg.sender.call{value: amount}("");
+    require(ok, "ETH transfer failed");
+
+    emit EQMTLiquidated(
+        keccak256(bytes(uuid)),
+        uuid,
+        amount,
+        msg.sender,
+        tokenId
+    );
+}
+
+ function getStrategyBytes(bytes calldata uuidBytes) external view returns (Strategy memory)
+{
+    string memory uuid = string(uuidBytes);
+    return strategies[uuid];
+}
+
+ function getStrategy(string calldata uuid)
         external
         view
         returns (Strategy memory)
@@ -306,7 +344,4 @@ function liquidateEQMT(string calldata uuid, uint256 amount)
     {
         return ownerOf(tokenId);
     }
-
-
-
 }
