@@ -41,6 +41,18 @@ mapping(string => Strategy) public strategies;
 mapping(address => string) public activeUUID;
 mapping(uint256 => string) public tokenIdToUUID;
 
+
+ event EQMTEvent(
+            string indexed uuid,        // topic1
+            uint256 indexed tokenId,    // topic2
+            uint8 action,               // 1=mint,2=credit,3=liquidate,4=close,5=burn,6=ownerChange
+            uint256 amount,             // credit/liquidate only, otherwise 0
+            address addr1,              // mint: owner | liquidate: to | ownerChange: from
+            address addr2,              // ownerChange: to | others: zero address
+            string meta                 // JSON or string with extra data
+        );
+
+
 event EQMTMinted(
         bytes32 indexed uuidHash,
         string uuid,
@@ -153,7 +165,7 @@ event EQMTMinted(
         activeUUID[wallet] = uuid;
         tokenIdToUUID[tokenId] = uuid;
 
-        emit EQMTMinted(
+  /*      emit EQMTMinted(
             keccak256(bytes(uuid)),
             uuid,
             wallet,
@@ -161,6 +173,20 @@ event EQMTMinted(
             sanity,
             tokenId
         );
+    */
+        emit EQMTEvent(
+    uuid,
+    tokenId,
+    1,                     // action = mint
+    0,                     // amount
+    wallet,                // addr1 = owner
+    address(0),            // addr2 unused
+     string(
+        abi.encodePacked(
+            '{"action":"mint","fcid":', Strings.toString(fcid),
+            ',"sanity":"', sanity, '"}'
+        ))
+);
     }
 
     function creditEQMT(string calldata uuid, string calldata ref)
@@ -173,14 +199,25 @@ event EQMTMinted(
         require(msg.value > 0, "No ETH sent");
 
         strategies[uuid].equity += msg.value;
+     uint256 tokenId = strategies[uuid].tokenId;
 
-        emit EQMTCredited(
+  /*      emit EQMTCredited(
             keccak256(bytes(uuid)),
             uuid,
             msg.value,
             ref,
             strategies[uuid].tokenId
         );
+    */
+        emit EQMTEvent(
+    uuid,
+    tokenId,
+    2,                     // action = credit
+    msg.value,
+    address(0),
+    address(0),
+    ref                    // meta = ref string
+);
     }
 
     function adminReassign(string calldata uuid, address newWallet)
@@ -203,13 +240,24 @@ event EQMTMinted(
         p.owner = newWallet;
         activeUUID[newWallet] = uuid;
 
-        emit EQMTOwnerChanged(
+  /*      emit EQMTOwnerChanged(
             keccak256(bytes(uuid)),
             uuid,
             oldWallet,
             newWallet,
             p.tokenId
         );
+    */
+        uint256 tokenId = strategies[uuid].tokenId;
+        emit EQMTEvent(
+    uuid,
+    tokenId,
+    6,                     // ownerchange
+    0,
+    oldWallet,             // addr1 = from
+    newWallet,             // addr2 = to
+    ""
+);
     }
 
     function closeEQMT(string calldata uuid)
@@ -218,7 +266,18 @@ event EQMTMinted(
         strategyExists(uuid)
     {
         strategies[uuid].active = false;
-        emit EQMTClosed(keccak256(bytes(uuid)), uuid, strategies[uuid].tokenId);
+ uint256 tokenId = strategies[uuid].tokenId;
+  //      emit EQMTClosed(keccak256(bytes(uuid)), uuid, strategies[uuid].tokenId);
+    emit EQMTEvent(
+    uuid,
+    tokenId,
+    4,                     // action = close
+    0,
+    address(0),
+    address(0),
+    ""
+);
+    
     }
 
     function burnEQMT(string calldata uuid)
@@ -230,7 +289,16 @@ event EQMTMinted(
         _burn(tokenId);
         delete tokenIdToUUID[tokenId];
         delete strategies[uuid];
-        emit EQMTBurned(keccak256(bytes(uuid)), uuid, tokenId);
+     //   emit EQMTBurned(keccak256(bytes(uuid)), uuid, tokenId);
+emit EQMTEvent(
+    uuid,
+    tokenId,
+    5,                     // burn
+    0,
+    address(0),
+    address(0),
+    ""
+);
     }
 
 /*
@@ -290,13 +358,23 @@ function liquidateEQMT(uint256 tokenId) external {
     (bool ok, ) = msg.sender.call{value: amount}("");
     require(ok, "ETH transfer failed");
 
-    emit EQMTLiquidated(
+  /*  emit EQMTLiquidated(
         keccak256(bytes(uuid)),
         uuid,
         amount,
         msg.sender,
         tokenId
     );
+    */
+    emit EQMTEvent(
+    uuid,
+    tokenId,
+    3,                     // action = liquidate
+    amount,                // = equity withdrawn
+    msg.sender,            // addr1 = receiver
+    address(0),
+    ""
+);
 }
 
  function getStrategyBytes(bytes calldata uuidBytes) external view returns (Strategy memory)
