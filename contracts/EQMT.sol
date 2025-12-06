@@ -1,121 +1,184 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.21;
+pragma solidity ^0.8.4;
 
-contract EQMT {
+import "@openzeppelin/contracts@4.7.0/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts@4.7.0/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts@4.7.0/access/Ownable.sol";
+import "@openzeppelin/contracts@4.7.0/utils/Counters.sol";
+import "@openzeppelin/contracts@4.7.0/utils/Strings.sol";
+import "@openzeppelin/contracts@4.7.0/utils/Base64.sol";
 
-    address public admin;
-
-    struct Position {
+contract EQMT is ERC721 {
+address public admin;
+    uint256 private _tokenIdCounter;
+    struct Strategy {
         uint16 fcid;
-        uint64 bid;
         string sanity;
-        string uuid;            // plaintext UUID kept here
-        uint256 baseequity;
-        uint256 equityBalance;
+        string uuid;
+        uint256 equity;
         bool active;
         address owner;
+        uint256 tokenId;
     }
 
-    // UUID (plaintext) → Position
-    mapping(string => Position) public positions;
+constructor() ERC721("EqMesh Strategy Token", "EQMT") {
+    admin = msg.sender;
+}
 
-    // Wallet → currently active UUID (plaintext)
-    mapping(address => string) public activeUUID;
+function tokenURI(uint256 tokenId)
+    public
+    view
+    override
+    returns (string memory)
+{
+    require(_exists(tokenId), "Invalid token");
+    string memory uuid = tokenIdToUUID[tokenId];
+    Strategy memory p = strategies[uuid];
 
-    // ------------------------ EVENTS ------------------------
-    // uuidHash = keccak256(bytes(uuid))
-    // allows fast filtering on-chain
-    event EQMTMinted(
+    string memory json = string(
+        abi.encodePacked(
+            "{",
+                '"name":"EqMesh Strategy Token #', Strings.toString(tokenId), '",',
+                '"description":"EQMT is a eth-backed Strategy token. Each token represents a financial Strategy run on eqmesh.com.",',
+                '"image":"https://eqmesh.com/static/images/logo-250.png",',
+                '"external_url":"https://eqmesh.com/token",',
+                '"attributes":[',
+                    '{"trait_type":"Sanity","value":"', p.sanity, '"},',
+                "]",
+            "}"
+        )
+    );
+    return string(
+        abi.encodePacked(
+            "data:application/json;base64,",
+                Base64.encode(bytes(json))
+        )
+    );
+}
+
+mapping(string => Strategy) public strategies;
+mapping(address => string) public activeUUID;
+mapping(uint256 => string) public tokenIdToUUID;
+
+event EQMTMinted(
         bytes32 indexed uuidHash,
         string uuid,
         address owner,
         uint16 fcid,
-        uint64 bid,
         string sanity,
-        uint256 baseequity
+        uint256 tokenId
     );
 
     event EQMTCredited(
         bytes32 indexed uuidHash,
         string uuid,
         uint256 amount,
-        string ref
+        string ref,
+        uint256 tokenId
     );
 
     event EQMTLiquidated(
         bytes32 indexed uuidHash,
         string uuid,
         uint256 amount,
-        address to
+        address to,
+        uint256 tokenId
     );
 
     event EQMTOwnerChanged(
         bytes32 indexed uuidHash,
         string uuid,
         address from,
-        address to
+        address to,
+        uint256 tokenId
     );
 
-    event EQMTClosed(bytes32 indexed uuidHash, string uuid);
-    event EQMTBurned(bytes32 indexed uuidHash, string uuid);
-
-    // ------------------------ MODIFIERS ------------------------
+    event EQMTClosed(bytes32 indexed uuidHash, string uuid, uint256 tokenId);
+    event EQMTBurned(bytes32 indexed uuidHash, string uuid, uint256 tokenId);
 
     modifier onlyAdmin() {
         require(msg.sender == admin, "Admin only");
         _;
     }
 
-    modifier positionExists(string memory uuid) {
-        require(positions[uuid].owner != address(0), "Position does not exist");
+    modifier strategyExists(string memory uuid) {
+        require(strategies[uuid].owner != address(0), "No Strategy");
         _;
     }
 
-    constructor() {
-        admin = msg.sender;
+    
+ function _beforeTokenTransfer(
+    address from, 
+    address to, 
+    uint256 tokenId
+    ) internal override virtual {
+    require(from == address(0), "Err: no Private Transfers!"); 
+    super._beforeTokenTransfer(from, to, tokenId);  
     }
 
-    // ------------------------ ADMIN FUNCTIONS ------------------------
+    // Required for ERC721 compliance
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
+
+    // Override transfer functions to block transfers
+    function _transfer(
+        address from,
+        address to,
+        uint256 tokenId
+    ) internal virtual override {
+        require(from == address(0) || to == address(0), "No Transfers");
+        super._transfer(from, to, tokenId);
+    }
+
+    function _safeTransfer(
+        address from,
+        address to,
+        uint256 tokenId,
+        bytes memory _data
+    ) internal virtual override {
+        require(from == address(0) || to == address(0), "No Transfers");
+        super._safeTransfer(from, to, tokenId, _data);
+    }
 
     function mintEQMT(
         string calldata uuid,
         address wallet,
         uint16 fcid,
-        uint64 bid,
-        string calldata sanity,
-        uint256 baseequity
+        string calldata sanity
     )
         external
         onlyAdmin
     {
-        // Close existing active position
         string memory oldUUID = activeUUID[wallet];
-        if (bytes(oldUUID).length > 0 && positions[oldUUID].active) {
-            positions[oldUUID].active = false;
-            emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID);
+        if (bytes(oldUUID).length > 0 && strategies[oldUUID].active) {
+            strategies[oldUUID].active = false;
+            emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID, strategies[oldUUID].tokenId);
         }
 
-        positions[uuid] = Position({
+        uint256 tokenId = _tokenIdCounter++;
+        _safeMint(wallet, tokenId);
+
+        strategies[uuid] = Strategy({
             fcid: fcid,
-            bid: bid,
             sanity: sanity,
             uuid: uuid,
-            baseequity: baseequity,
-            equityBalance: 0,
+            equity: 0,
             active: true,
-            owner: wallet
+            owner: wallet,
+            tokenId: tokenId
         });
 
         activeUUID[wallet] = uuid;
+        tokenIdToUUID[tokenId] = uuid;
 
         emit EQMTMinted(
             keccak256(bytes(uuid)),
             uuid,
             wallet,
             fcid,
-            bid,
             sanity,
-            baseequity
+            tokenId
         );
     }
 
@@ -123,34 +186,38 @@ contract EQMT {
         external
         payable
         onlyAdmin
-        positionExists(uuid)
+        strategyExists(uuid)
     {
-        require(positions[uuid].active, "Position closed");
+        require(strategies[uuid].active, "Strategy closed");
         require(msg.value > 0, "No ETH sent");
 
-        positions[uuid].equityBalance += msg.value;
+        strategies[uuid].equity += msg.value;
 
         emit EQMTCredited(
             keccak256(bytes(uuid)),
             uuid,
             msg.value,
-            ref
+            ref,
+            strategies[uuid].tokenId
         );
     }
 
     function adminReassign(string calldata uuid, address newWallet)
         external
         onlyAdmin
-        positionExists(uuid)
+        strategyExists(uuid)
     {
-        Position storage p = positions[uuid];
+        Strategy storage p = strategies[uuid];
         address oldWallet = p.owner;
 
         string memory oldUUID = activeUUID[newWallet];
-        if (bytes(oldUUID).length > 0 && positions[oldUUID].active) {
-            positions[oldUUID].active = false;
-            emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID);
+        if (bytes(oldUUID).length > 0 && strategies[oldUUID].active) {
+            strategies[oldUUID].active = false;
+            emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID, strategies[oldUUID].tokenId);
         }
+
+        // Use internal transfer which we've overridden
+        super._transfer(oldWallet, newWallet, p.tokenId);
 
         p.owner = newWallet;
         activeUUID[newWallet] = uuid;
@@ -159,42 +226,44 @@ contract EQMT {
             keccak256(bytes(uuid)),
             uuid,
             oldWallet,
-            newWallet
+            newWallet,
+            p.tokenId
         );
     }
 
     function closeEQMT(string calldata uuid)
         external
         onlyAdmin
-        positionExists(uuid)
+        strategyExists(uuid)
     {
-        positions[uuid].active = false;
-        emit EQMTClosed(keccak256(bytes(uuid)), uuid);
+        strategies[uuid].active = false;
+        emit EQMTClosed(keccak256(bytes(uuid)), uuid, strategies[uuid].tokenId);
     }
 
     function burnEQMT(string calldata uuid)
         external
         onlyAdmin
-        positionExists(uuid)
+        strategyExists(uuid)
     {
-        delete positions[uuid];
-        emit EQMTBurned(keccak256(bytes(uuid)), uuid);
+        uint256 tokenId = strategies[uuid].tokenId;
+        _burn(tokenId);
+        delete tokenIdToUUID[tokenId];
+        delete strategies[uuid];
+        emit EQMTBurned(keccak256(bytes(uuid)), uuid, tokenId);
     }
-
-    // ------------------------ CLIENT FUNCTION ------------------------
 
     function liquidateEQMT(string calldata uuid)
         external
-        positionExists(uuid)
+        strategyExists(uuid)
     {
-        Position storage p = positions[uuid];
+        Strategy storage p = strategies[uuid];
 
         require(p.owner == msg.sender, "Not owner");
-        require(p.active, "Position closed");
-        require(p.equityBalance > 0, "No balance");
+        require(p.active, "Strategy closed");
+        require(p.equity > 0, "No balance");
 
-        uint256 amount = p.equityBalance;
-        p.equityBalance = 0;
+        uint256 amount = p.equity;
+        p.equity = 0;
 
         (bool sent, ) = msg.sender.call{value: amount}("");
         require(sent, "Transfer failed");
@@ -203,18 +272,17 @@ contract EQMT {
             keccak256(bytes(uuid)),
             uuid,
             amount,
-            msg.sender
+            msg.sender,
+            p.tokenId
         );
     }
 
-    // ------------------------ VIEWS ------------------------
-
-    function getPosition(string calldata uuid)
+    function getStrategy(string calldata uuid)
         external
         view
-        returns (Position memory)
+        returns (Strategy memory)
     {
-        return positions[uuid];
+        return strategies[uuid];
     }
 
     function getActiveUUID(address wallet)
@@ -224,4 +292,31 @@ contract EQMT {
     {
         return activeUUID[wallet];
     }
+
+    function getTokenIdForUUID(string calldata uuid)
+        external
+        view
+        returns (uint256)
+    {
+        return strategies[uuid].tokenId;
+    }
+
+    function getUUIDForTokenId(uint256 tokenId)
+        external
+        view
+        returns (string memory)
+    {
+        return tokenIdToUUID[tokenId];
+    }
+
+    function ownerOfTokenId(uint256 tokenId)
+        external
+        view
+        returns (address)
+    {
+        return ownerOf(tokenId);
+    }
+
+
+
 }
