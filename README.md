@@ -2,6 +2,6 @@
 
 This repository contains the EQMT on-chain position system.
 
-## the [OnChain](/EqMesh/EQMT/tree/OnChain) Branch
+## the Onchain Branch
 is used to reflect the state of items when deployed to the blockchain.
-content branched there is not supposed to be updated after deployment is completed.
+the public page under [eqmesh.github.io](https://eqmesh.github.io/EQMT) used the OnChain branch to accurately reflect the state of the published Tokens.
