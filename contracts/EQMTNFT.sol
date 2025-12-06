@@ -8,13 +8,10 @@ import "@openzeppelin/contracts@4.7.0/utils/Counters.sol";
 import "@openzeppelin/contracts@4.7.0/utils/Strings.sol";
 import "@openzeppelin/contracts@4.7.0/utils/Base64.sol";
 
-contract EQMTNFT3 is ERC721 {
-    address public admin;
-    string private constant TOKEN_IMAGE =
-        "https://eqmesh.com/static/images/logo-250.png";
+contract EQMT is ERC721 {
+address public admin;
     uint256 private _tokenIdCounter;
-
-    struct Position {
+    struct Strategy {
         uint16 fcid;
         string sanity;
         string uuid;
@@ -24,11 +21,46 @@ contract EQMTNFT3 is ERC721 {
         uint256 tokenId;
     }
 
-    mapping(string => Position) public positions;
-    mapping(address => string) public activeUUID;
-    mapping(uint256 => string) public tokenIdToUUID;
+constructor() ERC721("EqMesh Strategy Token", "EQMT") {
+    admin = msg.sender;
+}
 
-    event EQMTMinted(
+function tokenURI(uint256 tokenId)
+    public
+    view
+    override
+    returns (string memory)
+{
+    require(_exists(tokenId), "Invalid token");
+    string memory uuid = tokenIdToUUID[tokenId];
+    Strategy memory p = strategies[uuid];
+
+    string memory json = string(
+        abi.encodePacked(
+            "{",
+                '"name":"EqMesh Strategy Token #', Strings.toString(tokenId), '",',
+                '"description":"EQMT is a eth-backed Strategy token. Each token represents a financial Strategy run on eqmesh.com.",',
+                '"image":"https://eqmesh.com/static/images/logo-250.png",',
+                '"external_url":"https://eqmesh.com/token",',
+                '"attributes":[',
+                    '{"trait_type":"Sanity","value":"', p.sanity, '"},',
+                "]",
+            "}"
+        )
+    );
+    return string(
+        abi.encodePacked(
+            "data:application/json;base64,",
+                Base64.encode(bytes(json))
+        )
+    );
+}
+
+mapping(string => Strategy) public strategies;
+mapping(address => string) public activeUUID;
+mapping(uint256 => string) public tokenIdToUUID;
+
+event EQMTMinted(
         bytes32 indexed uuidHash,
         string uuid,
         address owner,
@@ -69,57 +101,18 @@ contract EQMTNFT3 is ERC721 {
         _;
     }
 
-    modifier positionExists(string memory uuid) {
-        require(positions[uuid].owner != address(0), "Position does not exist");
+    modifier strategyExists(string memory uuid) {
+        require(strategies[uuid].owner != address(0), "No Strategy");
         _;
     }
 
-    constructor() ERC721("EqMesh Strategy Token", "EQMT") {
-        admin = msg.sender;
-    }
-
-    // --------------------------------------------------------
-    // ERC721 METADATA — tokenURI()
-    // --------------------------------------------------------
-    function tokenURI(uint256 tokenId)
-    public
-    view
-    override
-    returns (string memory)
-{
-    require(_exists(tokenId), "Invalid token");
-    string memory uuid = tokenIdToUUID[tokenId];
-    Position memory p = positions[uuid];
-
-    string memory json = string(
-        abi.encodePacked(
-            "{",
-                '"name":"EqMesh Strategy Token #', Strings.toString(tokenId), '",',
-                '"description":"EQMT are non-transferable, the ETH comes with it are yours to keep!",',
-                '"image":"', TOKEN_IMAGE, '",',
-                '"fcid":', Strings.toString(p.fcid), ',',
-                '"sanity":"', p.sanity, '",',
-                '"equity":"eth attached",',
-            "}"
-        )
-    );
-
-    return string(
-        abi.encodePacked(
-            "data:application/json;base64,",
-            Base64.encode(bytes(json))
-        )
-    );
-
-    }
-        
-                // Solution: Remove override and implement custom transfer blocking
+    
  function _beforeTokenTransfer(
     address from, 
     address to, 
     uint256 tokenId
     ) internal override virtual {
-    require(from == address(0), "Err: token transfer is BLOCKED"); 
+    require(from == address(0), "Err: no Private Transfers!"); 
     super._beforeTokenTransfer(from, to, tokenId);  
     }
 
@@ -134,7 +127,7 @@ contract EQMTNFT3 is ERC721 {
         address to,
         uint256 tokenId
     ) internal virtual override {
-        require(from == address(0) || to == address(0), "Transfers disabled");
+        require(from == address(0) || to == address(0), "No Transfers");
         super._transfer(from, to, tokenId);
     }
 
@@ -144,7 +137,7 @@ contract EQMTNFT3 is ERC721 {
         uint256 tokenId,
         bytes memory _data
     ) internal virtual override {
-        require(from == address(0) || to == address(0), "Transfers disabled");
+        require(from == address(0) || to == address(0), "No Transfers");
         super._safeTransfer(from, to, tokenId, _data);
     }
 
@@ -158,15 +151,15 @@ contract EQMTNFT3 is ERC721 {
         onlyAdmin
     {
         string memory oldUUID = activeUUID[wallet];
-        if (bytes(oldUUID).length > 0 && positions[oldUUID].active) {
-            positions[oldUUID].active = false;
-            emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID, positions[oldUUID].tokenId);
+        if (bytes(oldUUID).length > 0 && strategies[oldUUID].active) {
+            strategies[oldUUID].active = false;
+            emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID, strategies[oldUUID].tokenId);
         }
 
         uint256 tokenId = _tokenIdCounter++;
         _safeMint(wallet, tokenId);
 
-        positions[uuid] = Position({
+        strategies[uuid] = Strategy({
             fcid: fcid,
             sanity: sanity,
             uuid: uuid,
@@ -193,34 +186,34 @@ contract EQMTNFT3 is ERC721 {
         external
         payable
         onlyAdmin
-        positionExists(uuid)
+        strategyExists(uuid)
     {
-        require(positions[uuid].active, "Position closed");
+        require(strategies[uuid].active, "Strategy closed");
         require(msg.value > 0, "No ETH sent");
 
-        positions[uuid].equity += msg.value;
+        strategies[uuid].equity += msg.value;
 
         emit EQMTCredited(
             keccak256(bytes(uuid)),
             uuid,
             msg.value,
             ref,
-            positions[uuid].tokenId
+            strategies[uuid].tokenId
         );
     }
 
     function adminReassign(string calldata uuid, address newWallet)
         external
         onlyAdmin
-        positionExists(uuid)
+        strategyExists(uuid)
     {
-        Position storage p = positions[uuid];
+        Strategy storage p = strategies[uuid];
         address oldWallet = p.owner;
 
         string memory oldUUID = activeUUID[newWallet];
-        if (bytes(oldUUID).length > 0 && positions[oldUUID].active) {
-            positions[oldUUID].active = false;
-            emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID, positions[oldUUID].tokenId);
+        if (bytes(oldUUID).length > 0 && strategies[oldUUID].active) {
+            strategies[oldUUID].active = false;
+            emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID, strategies[oldUUID].tokenId);
         }
 
         // Use internal transfer which we've overridden
@@ -241,32 +234,32 @@ contract EQMTNFT3 is ERC721 {
     function closeEQMT(string calldata uuid)
         external
         onlyAdmin
-        positionExists(uuid)
+        strategyExists(uuid)
     {
-        positions[uuid].active = false;
-        emit EQMTClosed(keccak256(bytes(uuid)), uuid, positions[uuid].tokenId);
+        strategies[uuid].active = false;
+        emit EQMTClosed(keccak256(bytes(uuid)), uuid, strategies[uuid].tokenId);
     }
 
     function burnEQMT(string calldata uuid)
         external
         onlyAdmin
-        positionExists(uuid)
+        strategyExists(uuid)
     {
-        uint256 tokenId = positions[uuid].tokenId;
+        uint256 tokenId = strategies[uuid].tokenId;
         _burn(tokenId);
         delete tokenIdToUUID[tokenId];
-        delete positions[uuid];
+        delete strategies[uuid];
         emit EQMTBurned(keccak256(bytes(uuid)), uuid, tokenId);
     }
 
     function liquidateEQMT(string calldata uuid)
         external
-        positionExists(uuid)
+        strategyExists(uuid)
     {
-        Position storage p = positions[uuid];
+        Strategy storage p = strategies[uuid];
 
         require(p.owner == msg.sender, "Not owner");
-        require(p.active, "Position closed");
+        require(p.active, "Strategy closed");
         require(p.equity > 0, "No balance");
 
         uint256 amount = p.equity;
@@ -284,12 +277,12 @@ contract EQMTNFT3 is ERC721 {
         );
     }
 
-    function getPosition(string calldata uuid)
+    function getStrategy(string calldata uuid)
         external
         view
-        returns (Position memory)
+        returns (Strategy memory)
     {
-        return positions[uuid];
+        return strategies[uuid];
     }
 
     function getActiveUUID(address wallet)
@@ -305,7 +298,7 @@ contract EQMTNFT3 is ERC721 {
         view
         returns (uint256)
     {
-        return positions[uuid].tokenId;
+        return strategies[uuid].tokenId;
     }
 
     function getUUIDForTokenId(uint256 tokenId)
