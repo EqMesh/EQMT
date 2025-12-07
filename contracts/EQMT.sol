@@ -42,7 +42,7 @@ mapping(address => string) public activeUUID;
 mapping(uint256 => string) public tokenIdToUUID;
 
 
- event EQMTEvent(
+ event EQMTEvent2(
             string indexed uuid,        // topic1
             uint256 indexed tokenId,    // topic2
             uint8 action,               // 1=mint,2=credit,3=liquidate,4=close,5=burn,6=ownerChange
@@ -52,6 +52,16 @@ mapping(uint256 => string) public tokenIdToUUID;
             string meta                 // JSON or string with extra data
         );
 
+event EQMTEvent(
+    bytes32 indexed uuidHash,   // topic1
+    uint256 indexed tokenId,    // topic2
+    uint8 action,               // 1=mint,2=credit,3=liquidate,4=close,5=burn,6=ownerChange
+    uint256 amount,             // credit/liquidate only, otherwise 0
+    address addr1,              // mint: owner | liquidate: to | ownerChange: from
+    address addr2,              // sownerChange: to | others: zero address
+    string uuid,                // uuid (plaintext)
+    string meta                 // JSON or string with extra data
+);
 
 event EQMTMinted(
         bytes32 indexed uuidHash,
@@ -100,14 +110,17 @@ event EQMTMinted(
     }
 
     
- function _beforeTokenTransfer(
-    address from, 
-    address to, 
-    uint256 tokenId
-    ) internal override virtual {
-    require(from == address(0), "Err: no Private Transfers!"); 
-    super._beforeTokenTransfer(from, to, tokenId);  
+function _beforeTokenTransfer(address from, address to, uint256 tokenId)
+    internal
+    override
+{
+    // Allow minting OR admin-performed transfers
+    if (!(from == address(0) || msg.sender == admin)) {
+        revert("Err: no Private Transfers!");
     }
+
+    super._beforeTokenTransfer(from, to, tokenId);
+}
 
     // Required for ERC721 compliance
     function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
@@ -115,24 +128,29 @@ event EQMTMinted(
     }
 
     // Override transfer functions to block transfers
-    function _transfer(
-        address from,
-        address to,
-        uint256 tokenId
-    ) internal virtual override {
-        require(from == address(0) || to == address(0), "No Transfers");
-        super._transfer(from, to, tokenId);
+    function _transfer(address from, address to, uint256 tokenId)
+    internal
+    override
+{
+    // Allow mint OR admin override
+    if (!(from == address(0) || msg.sender == admin)) {
+        revert("No Transfers");
     }
 
-    function _safeTransfer(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory _data
-    ) internal virtual override {
-        require(from == address(0) || to == address(0), "No Transfers");
-        super._safeTransfer(from, to, tokenId, _data);
+    super._transfer(from, to, tokenId);
+}
+
+    function _safeTransfer(address from, address to, uint256 tokenId, bytes memory data)
+    internal
+    override
+{
+    // Allow mint OR admin override
+    if (!(from == address(0) || msg.sender == admin)) {
+        revert("No Transfers");
     }
+
+    super._safeTransfer(from, to, tokenId, data);
+}
 
     function mintEQMT(
         string calldata uuid,
@@ -146,7 +164,10 @@ event EQMTMinted(
         string memory oldUUID = activeUUID[wallet];
         if (bytes(oldUUID).length > 0 && strategies[oldUUID].active) {
             strategies[oldUUID].active = false;
+
+            // needs to be changed to new Events!!!
             emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID, strategies[oldUUID].tokenId);
+        
         }
 
         uint256 tokenId = _tokenIdCounter++;
@@ -174,19 +195,21 @@ event EQMTMinted(
             tokenId
         );
     */
-        emit EQMTEvent(
-    uuid,
+       emit EQMTEvent(
+    keccak256(bytes(uuid)),
     tokenId,
-    1,                     // action = mint
-    0,                     // amount
-    wallet,                // addr1 = owner
-    address(0),            // addr2 unused
-     string(
+    1,
+    0,
+    wallet,
+    address(0),
+    uuid,
+         string(
         abi.encodePacked(
             '{"action":"mint","fcid":', Strings.toString(fcid),
             ',"sanity":"', sanity, '"}'
         ))
 );
+
     }
 
     function creditEQMT(string calldata uuid, string calldata ref)
@@ -209,15 +232,17 @@ event EQMTMinted(
             strategies[uuid].tokenId
         );
     */
-        emit EQMTEvent(
-    uuid,
+emit EQMTEvent(
+    keccak256(bytes(uuid)),
     tokenId,
-    2,                     // action = credit
-    msg.value,
+    2,
+     msg.value,
     address(0),
     address(0),
-    ref                    // meta = ref string
+    uuid,
+    ref
 );
+
     }
 
     function adminReassign(string calldata uuid, address newWallet)
@@ -249,15 +274,17 @@ event EQMTMinted(
         );
     */
         uint256 tokenId = strategies[uuid].tokenId;
-        emit EQMTEvent(
-    uuid,
+  emit EQMTEvent(
+    keccak256(bytes(uuid)),
     tokenId,
-    6,                     // ownerchange
+    6,
     0,
-    oldWallet,             // addr1 = from
-    newWallet,             // addr2 = to
+    oldWallet,
+    newWallet,
+    uuid,
     ""
 );
+
     }
 
     function closeEQMT(string calldata uuid)
@@ -267,16 +294,17 @@ event EQMTMinted(
     {
         strategies[uuid].active = false;
  uint256 tokenId = strategies[uuid].tokenId;
-  //      emit EQMTClosed(keccak256(bytes(uuid)), uuid, strategies[uuid].tokenId);
-    emit EQMTEvent(
-    uuid,
+       emit EQMTEvent(
+    keccak256(bytes(uuid)),
     tokenId,
-    4,                     // action = close
+    4,
     0,
     address(0),
     address(0),
+    uuid,
     ""
 );
+
     
     }
 
@@ -289,17 +317,19 @@ event EQMTMinted(
         _burn(tokenId);
         delete tokenIdToUUID[tokenId];
         delete strategies[uuid];
-     //   emit EQMTBurned(keccak256(bytes(uuid)), uuid, tokenId);
-emit EQMTEvent(
-    uuid,
+
+        emit EQMTEvent(
+    keccak256(bytes(uuid)),
     tokenId,
-    5,                     // burn
+    5,
     0,
     address(0),
     address(0),
-    ""
+    uuid,
+""
 );
-    }
+
+   }
 
 /*
 function liquidateEQMT(string calldata uuid, uint256 amount)
@@ -366,15 +396,20 @@ function liquidateEQMT(uint256 tokenId) external {
         tokenId
     );
     */
-    emit EQMTEvent(
-    uuid,
+
+       emit EQMTEvent(
+    keccak256(bytes(uuid)),
     tokenId,
-    3,                     // action = liquidate
-    amount,                // = equity withdrawn
-    msg.sender,            // addr1 = receiver
+    3,
+    amount,
+    msg.sender,
     address(0),
+    uuid,
     ""
 );
+
+
+
 }
 
  function getStrategyBytes(bytes calldata uuidBytes) external view returns (Strategy memory)
