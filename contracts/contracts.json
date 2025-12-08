@@ -4,20 +4,25 @@
   "chainId": 11155111,
   "contracts": [
     {
-      "versionTag": "eqmt-0.11-alpha",
-      "commit": "deadbeef",
-      "address": "0x1F1E9B090E5Be5F1cF934B616Ea2eE440C38733a",
-      "status": "legacy",
-      "replacedBy": "0xF9D2c92A880B2335BB3DDCD1f870e83c6901F4CD",
-      "deployedAtBlock": 18765432
-    },
-    {
-      "versionTag": "eqmt-0.12-alpha",
-      "commit": "abc1234",
+      "version": "0.021",
       "address": "0xF9D2c92A880B2335BB3DDCD1f870e83c6901F4CD",
-      "status": "current",
-      "replaces": "0x1F1E9B090E5Be5F1cF934B616Ea2eE440C38733a",
+      "status": "deploying",
+      "replaces": "0xF9D2c92A880B2335BB3DDCD1f870e83c6901F4CD",
       "deployedAtBlock": 19999999
     }
+    {
+      "version": "0.012",
+      "address": "0xF9D2c92A880B2335BB3DDCD1f870e83c6901F4CD",
+      "status": "legacy",
+      "replaces": "0x1F1E9B090E5Be5F1cF934B616Ea2eE440C38733a",
+      "deployedAtBlock": 9792757
+    }
+    {
+      "version": "0.011",
+      "address": "0x1F1E9B090E5Be5F1cF934B616Ea2eE440C38733a",
+      "status": "legacy",
+      "replacedBy": "0x0",
+      "deployedAtBlock": 18765432
+    },
   ]
 }
