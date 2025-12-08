@@ -5,24 +5,24 @@
   "contracts": [
     {
       "version": "0.021",
-      "address": "0xF9D2c92A880B2335BB3DDCD1f870e83c6901F4CD",
+      "address": "0xbf623fe7F3adc651bF6744aB297B19598052EE49",
       "status": "deploying",
       "replaces": "0xF9D2c92A880B2335BB3DDCD1f870e83c6901F4CD",
-      "deployedAtBlock": 19999999
-    }
+      "deployedAtBlock": 9794797 
+    },
     {
       "version": "0.012",
       "address": "0xF9D2c92A880B2335BB3DDCD1f870e83c6901F4CD",
       "status": "legacy",
       "replaces": "0x1F1E9B090E5Be5F1cF934B616Ea2eE440C38733a",
       "deployedAtBlock": 9792757
-    }
+    },
     {
       "version": "0.011",
       "address": "0x1F1E9B090E5Be5F1cF934B616Ea2eE440C38733a",
       "status": "legacy",
       "replacedBy": "0x0",
       "deployedAtBlock": 18765432
-    },
+    }
   ]
 }

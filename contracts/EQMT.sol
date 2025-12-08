@@ -3,11 +3,14 @@ pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts@4.7.0/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts@4.7.0/utils/Strings.sol";
-import "@openzeppelin/contracts@4.7.0/utils/Base64.sol";
 
 contract EQMT is ERC721 {
+    address public constant previousContract = 0xF9D2c92A880B2335BB3DDCD1f870e83c6901F4CD;
+    string public constant version = "0.021";
+    
     address public admin;
     uint256 private _tokenIdCounter;
+
     struct Strategy {
         uint16 fcid;
         string sanity;
@@ -18,24 +21,32 @@ contract EQMT is ERC721 {
         uint256 tokenId;
     }
 
-constructor() ERC721("EqMesh Strategy Token", "EQMT") {
-    admin = msg.sender;
-}
+    constructor() ERC721("EqMesh Strategy Token", "EQMT") {
+        admin = msg.sender;
+    }
 
-function tokenURI(uint256 tokenId)
-    public
-    view
-    override
-    returns (string memory)
-{
-    require(_exists(tokenId), "Invalid token");
-    // Construct the URI using contract address + tokenId
-    return string(
-        abi.encodePacked(
-            "https://eqmesh.com/token/", Strings.toString(uint256(uint160(address(this)))), ".json"
-        )
-    );
-}
+    /// @notice Contract-level metadata URL: https://eqmesh.com/token/<contractAddress>.json
+    function contractURI() public view returns (string memory) {
+        return string(
+            abi.encodePacked(
+                "https://eqmesh.com/token/",
+                Strings.toHexString(uint160(address(this)), 20),
+                ".json"
+            )
+        );
+    }
+
+    /// @notice Token-level metadata; all tokens share the same JSON for this contract.
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        override
+        returns (string memory)
+    {
+        require(_exists(tokenId), "ERC721Metadata: URI query for nonexistent token");
+        return contractURI();
+    }
+        
 
 mapping(string => Strategy) public strategies;
 mapping(address => string) public activeUUID;
@@ -44,7 +55,7 @@ mapping(uint256 => string) public tokenIdToUUID;
 event EQMTEvent(
     bytes32 indexed uuidHash,   // topic1
     uint256 indexed tokenId,    // topic2
-    uint8 action,               // 1=mint,2=credit,3=liquidate,4=close,5=burn,6=ownerChange
+    uint8 action,               // 1=mint,2=credit,3=liquidate,4=close,5=burn,6=ownerChange,7=setlegacy
     uint256 amount,             // credit/liquidate only, otherwise 0
     address addr1,              // mint: owner | liquidate: to | ownerChange: from
     address addr2,              // sownerChange: to | others: zero address
@@ -52,8 +63,6 @@ event EQMTEvent(
     string meta                 // JSON or string with extra data
 );
 
-// pending removal!
-event EQMTClosed(bytes32 indexed uuidHash, string uuid, uint256 tokenId);
 
 modifier onlyAdmin() {
     require(msg.sender == admin, "Admin only");
@@ -76,11 +85,6 @@ function _beforeTokenTransfer(address from, address to, uint256 tokenId)
     super._beforeTokenTransfer(from, to, tokenId);
 }
 
-// Required for ERC721 compliance
-function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
-    return super.supportsInterface(interfaceId);
-}
-
 // Override transfer functions to block transfers
 function _transfer(address from, address to, uint256 tokenId)
     internal
@@ -91,17 +95,6 @@ function _transfer(address from, address to, uint256 tokenId)
         revert("No Transfers");
     }
     super._transfer(from, to, tokenId);
-}
-
-function _safeTransfer(address from, address to, uint256 tokenId, bytes memory data)
-    internal
-    override
-{
-    // Allow mint OR admin override
-    if (!(from == address(0) || msg.sender == admin)) {
-        revert("No Transfers");
-    }
-    super._safeTransfer(from, to, tokenId, data);
 }
 
 // Actual Token Functions 
@@ -119,8 +112,15 @@ function mintEQMT
     if (bytes(oldUUID).length > 0 && strategies[oldUUID].active) {
         strategies[oldUUID].active = false;
 
-        // needs to be changed to new Events!!!
-        emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID, strategies[oldUUID].tokenId);
+       emit EQMTEvent(
+        keccak256(bytes(oldUUID)),
+        strategies[oldUUID].tokenId,
+        4,
+        0,
+        wallet,
+        address(0),
+        uuid,
+        "");
     }
 
     uint256 tokenId = _tokenIdCounter++;
@@ -191,7 +191,16 @@ function adminReassign(string calldata uuid, address newWallet)
         strategies[oldUUID].active = false;
         
         // this needs to be reassigned to the new Event call!!
-        emit EQMTClosed(keccak256(bytes(oldUUID)), oldUUID, strategies[oldUUID].tokenId);
+        emit EQMTEvent(
+            keccak256(bytes(uuid)),
+            strategies[oldUUID].tokenId,
+            4,
+            0,
+            address(0),
+            address(0),
+            uuid,
+            ""
+        );
     }
 
     // Use internal transfer which we've overridden
@@ -299,35 +308,4 @@ function getStrategyBytes(bytes calldata uuidBytes) external view returns (Strat
     return strategies[uuid];
 }
 
-function getActiveUUID(address wallet)
-    external
-    view
-    returns (string memory)
-{
-    return activeUUID[wallet];
-}
-
-function getTokenIdForUUID(string calldata uuid)
-    external
-    view
-    returns (uint256)
-{
-    return strategies[uuid].tokenId;
-}
-
-function getUUIDForTokenId(uint256 tokenId)
-    external
-    view
-    returns (string memory)
-{
-    return tokenIdToUUID[tokenId];
-}
-
-function ownerOfTokenId(uint256 tokenId)
-    external
-    view
-    returns (address)
-{
-    return ownerOf(tokenId);
-}
 }
