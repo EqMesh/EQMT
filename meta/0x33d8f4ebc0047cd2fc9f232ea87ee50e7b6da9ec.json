@@ -1,0 +1,15 @@
+{
+	"name": "EqMesh Strategy Token",
+	"description": "EQMT is a non-transferable, Eth-backed Strategy token. Each token represents a financial Strategy. Tokens receive ETH from the issuer, owners may liquidate balances to their own wallet. this Token can not be transfered!",
+	"image": "https://eqmesh.com/static/images/logo-250.png",
+	"external_link": "https://eqmesh.com/token",
+	"external_url": "https://eqmesh.com/token",
+	"attributes": [
+	{
+		"trait_type": "Version",
+		"value": "0.0211",
+		"trait_type": "Replaces",
+		"value": "0xbf623fe7F3adc651bF6744aB297B19598052EE49"
+    }
+  ]
+}

@@ -4,9 +4,16 @@
   "chainId": 11155111,
   "contracts": [
     {
+      "version": "0.0211",
+      "address": "0x33d8F4ebC0047CD2Fc9F232EA87ee50e7b6da9Ec",
+      "status": "deploying",
+      "replaces": "0xbf623fe7F3adc651bF6744aB297B19598052EE49",
+      "deployedAtBlock": 9794889
+    },
+    {
       "version": "0.021",
       "address": "0xbf623fe7F3adc651bF6744aB297B19598052EE49",
-      "status": "deploying",
+      "status": "legacy",
       "replaces": "0xF9D2c92A880B2335BB3DDCD1f870e83c6901F4CD",
       "deployedAtBlock": 9794797 
     },

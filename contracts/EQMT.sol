@@ -5,8 +5,8 @@ import "@openzeppelin/contracts@4.7.0/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts@4.7.0/utils/Strings.sol";
 
 contract EQMT is ERC721 {
-    address public constant previousContract = 0xF9D2c92A880B2335BB3DDCD1f870e83c6901F4CD;
-    string public constant version = "0.021";
+    address public constant previousContract = 0xbf623fe7F3adc651bF6744aB297B19598052EE49;
+    string public constant version = "0.0211";
     
     address public admin;
     uint256 private _tokenIdCounter;
@@ -29,7 +29,7 @@ contract EQMT is ERC721 {
     function contractURI() public view returns (string memory) {
         return string(
             abi.encodePacked(
-                "https://eqmesh.com/token/",
+                "https://eqmesh.com/token/EQMT/meta/",
                 Strings.toHexString(uint160(address(this)), 20),
                 ".json"
             )
