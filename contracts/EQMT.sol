@@ -5,8 +5,8 @@ import "@openzeppelin/contracts@4.7.0/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts@4.7.0/utils/Strings.sol";
 
 contract EQMT is ERC721 {
-    address private constant previousContract = 0x0000000000000000000000000000000000000000;
-    string private constant version = "0.2";
+    address private constant previousContract = 0x1988cB209d705F49982E1a13842a7b684A281e58;
+    string private constant version = "0.201";
     
     address public admin;
     uint256 private _tokenIdCounter;
@@ -55,7 +55,7 @@ mapping(uint256 => string) public tokenIdToUUID;
 event EQMTEvent(
     bytes32 indexed uuidHash,   // topic1
     uint256 indexed tokenId,    // topic2
-    uint8 action,               // 1=mint,2=credit,3=liquidate,4=close,5=burn,6=ownerChange,7=setlegacy
+    uint8 action,               // 1=mint,2=credit,3=liquidate,4=close,5=burn,6=ownerChange,9=adminUpdate
     uint256 amount,             // credit/liquidate only, otherwise 0
     address addr1,              // mint: owner | liquidate: to | ownerChange: from
     address addr2,              // sownerChange: to | others: zero address
@@ -120,7 +120,7 @@ function mintEQMT
                 0,
                 wallet,
                 address(0),
-                uuid,
+                oldUUID,
                 ""
             );
         }
@@ -226,6 +226,30 @@ function adminReassign(string calldata uuid, address newWallet)
     );
 }
 
+// Emergency admin switch – use sparingly.
+// Does NOT update activeUUID, just flips the flag.
+function adminSetActive(uint256 tokenId, bool isActive)
+    external
+    onlyAdmin
+{
+    string memory uuid = tokenIdToUUID[tokenId];
+    require(bytes(uuid).length > 0, "UUID missing");
+
+    Strategy storage s = strategies[uuid];
+    address w = s.owner;
+    s.active = isActive;
+
+    if (isActive) {
+        // you are explicitly saying "this is the active one for this wallet"
+        activeUUID[w] = uuid;
+    } else if (keccak256(bytes(activeUUID[w])) == keccak256(bytes(uuid))) {
+        // if this was marked active, clear it
+        activeUUID[w] = "";
+    }
+    // we need some logging here! (event 9 should do it)
+
+}
+
 function closeEQMT(string calldata uuid)
     external
     onlyAdmin
@@ -267,23 +291,28 @@ function burnEQMT(string calldata uuid)
     );
 }
 
-function liquidateEQMT(uint256 tokenId) external {
-    require(_exists(tokenId), "Invalid token");
-    require(ownerOf(tokenId) == msg.sender, "Not token owner");
-
-    // Get the UUID associated with this tokenId
-    string memory uuid = tokenIdToUUID[tokenId];
-    require(bytes(uuid).length > 0, "UUID missing");
+function liquidateEQMT(string calldata uuid) external {
     Strategy storage s = strategies[uuid];
-    require(s.active, "Strategy not active");
-    require(s.equity > 0, "No equity to liquidate");
-    uint256 amount = s.equity;
+    require(s.owner != address(0), "No strategy");
 
-    // Prevent reentrancy
+    uint256 tokenId = s.tokenId;
+    require(_exists(tokenId), "Invalid token");
+
+    address owner = ownerOf(tokenId);
+    require(owner == s.owner, "Owner mismatch");
+
+    // allow owner or admin to trigger; always pay owner
+    require(
+        msg.sender == owner || msg.sender == admin,
+        "Not owner or admin"
+    );
+
+    require(s.equity > 0, "No equity to liquidate");
+
+    uint256 amount = s.equity;
     s.equity = 0;
 
-    // Transfer ETH to NFT owner
-    (bool ok, ) = msg.sender.call{value: amount}("");
+    (bool ok, ) = owner.call{value: amount}("");
     require(ok, "ETH transfer failed");
 
     emit EQMTEvent(
@@ -291,26 +320,10 @@ function liquidateEQMT(uint256 tokenId) external {
         tokenId,
         3,
         amount,
-        msg.sender,
+        owner,
         address(0),
         uuid,
         ""
     );
 }
-
-function getStrategy(string calldata uuid)
-    external
-    view
-    returns (Strategy memory)
-{
-        return strategies[uuid];
-}
-
-// same as getStrategy but accepts uuid in bytes
-function getStrategyBytes(bytes calldata uuidBytes) external view returns (Strategy memory)
-{
-    string memory uuid = string(uuidBytes);
-    return strategies[uuid];
-}
-
 }

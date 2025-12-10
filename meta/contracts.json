@@ -4,9 +4,16 @@
   "chainId": 1,
   "contracts": [
     {
+      "version": "0.201",
+      "address": "0x1e374a805e2184c55e2f3a5ec35471cfdce83b3a",
+      "status": "current",
+      "replaces": "0x1988cB209d705F49982E1a13842a7b684A281e58",
+      "deployedAtBlock": 23984469
+    },
+    {
       "version": "0.2",
       "address": "0x1988cB209d705F49982E1a13842a7b684A281e58",
-      "status": "current",
+      "status": "legacy",
       "replaces": "0x0000000000000000000000000000000000000000",
       "deployedAtBlock": 23981392
     },
@@ -21,36 +28,15 @@
       "version": "0.11",
       "address": "0x33d8F4ebC0047CD2Fc9F232EA87ee50e7b6da9Ec",
       "status": "testnet",
-      "replaces": "0x0",
+      "replaces": "0x0000000000000000000000000000000000000000",
       "deployedAtBlock": 0
     },
     {
       "version": "0.0211",
       "address": "0x33d8F4ebC0047CD2Fc9F232EA87ee50e7b6da9Ec",
-      "status": "legacy",
-      "replaces": "0xbf623fe7F3adc651bF6744aB297B19598052EE49",
+      "status": "testnet",
+      "replaces": "0x0000000000000000000000000000000000000000",
       "deployedAtBlock": 9794889
-    },
-    {
-      "version": "0.021",
-      "address": "0xbf623fe7F3adc651bF6744aB297B19598052EE49",
-      "status": "testnet",
-      "replaces": "0xF9D2c92A880B2335BB3DDCD1f870e83c6901F4CD",
-      "deployedAtBlock": 9794797 
-    },
-    {
-      "version": "0.012",
-      "address": "0xF9D2c92A880B2335BB3DDCD1f870e83c6901F4CD",
-      "status": "testnet",
-      "replaces": "0x1F1E9B090E5Be5F1cF934B616Ea2eE440C38733a",
-      "deployedAtBlock": 9792757
-    },
-    {
-      "version": "0.011",
-      "address": "0x1F1E9B090E5Be5F1cF934B616Ea2eE440C38733a",
-      "status": "testnet",
-      "replacedBy": "0x0",
-      "deployedAtBlock": 18765432
     }
   ]
 }
