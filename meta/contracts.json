@@ -1,33 +1,47 @@
 {
   "project": "EqMesh EQMT",
   "repo": "github.com/EqMesh/EQMT",
-  "chainId": 11155111,
+  "chainId": 1,
   "contracts": [
+    {
+      "version": "0.1017",
+      "address": "0x3A651437c2F9E3D7dd274650139Acf1A7A5B4989",
+      "status": "current",
+      "replaces": "0x0",
+      "deployedAtBlock": 9808866
+    },
+    {
+      "version": "0.11",
+      "address": "0x33d8F4ebC0047CD2Fc9F232EA87ee50e7b6da9Ec",
+      "status": "testnet",
+      "replaces": "0x0",
+      "deployedAtBlock": 0
+    },
     {
       "version": "0.0211",
       "address": "0x33d8F4ebC0047CD2Fc9F232EA87ee50e7b6da9Ec",
-      "status": "deploying",
+      "status": "legacy",
       "replaces": "0xbf623fe7F3adc651bF6744aB297B19598052EE49",
       "deployedAtBlock": 9794889
     },
     {
       "version": "0.021",
       "address": "0xbf623fe7F3adc651bF6744aB297B19598052EE49",
-      "status": "legacy",
+      "status": "testnet",
       "replaces": "0xF9D2c92A880B2335BB3DDCD1f870e83c6901F4CD",
       "deployedAtBlock": 9794797 
     },
     {
       "version": "0.012",
       "address": "0xF9D2c92A880B2335BB3DDCD1f870e83c6901F4CD",
-      "status": "legacy",
+      "status": "testnet",
       "replaces": "0x1F1E9B090E5Be5F1cF934B616Ea2eE440C38733a",
       "deployedAtBlock": 9792757
     },
     {
       "version": "0.011",
       "address": "0x1F1E9B090E5Be5F1cF934B616Ea2eE440C38733a",
-      "status": "legacy",
+      "status": "testnet",
       "replacedBy": "0x0",
       "deployedAtBlock": 18765432
     }

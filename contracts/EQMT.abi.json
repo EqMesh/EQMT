@@ -599,19 +599,6 @@
 		"type": "function"
 	},
 	{
-		"inputs": [],
-		"name": "previousContract",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
 		"inputs": [
 			{
 				"internalType": "string",
@@ -720,19 +707,6 @@
 			}
 		],
 		"name": "tokenURI",
-		"outputs": [
-			{
-				"internalType": "string",
-				"name": "",
-				"type": "string"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "version",
 		"outputs": [
 			{
 				"internalType": "string",

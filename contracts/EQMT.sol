@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.30;
 
 import "@openzeppelin/contracts@4.7.0/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts@4.7.0/utils/Strings.sol";
 
 contract EQMT is ERC721 {
-    address public constant previousContract = 0xbf623fe7F3adc651bF6744aB297B19598052EE49;
-    string public constant version = "0.0211";
+    address private constant previousContract = 0xbf623fe7F3adc651bF6744aB297B19598052EE49;
+    string private constant version = "0.1017";
     
     address public admin;
     uint256 private _tokenIdCounter;
@@ -43,7 +43,7 @@ contract EQMT is ERC721 {
         override
         returns (string memory)
     {
-        require(_exists(tokenId), "ERC721Metadata: URI query for nonexistent token");
+        require(_exists(tokenId), "ERC721Metadata: No Token");
         return contractURI();
     }
         
@@ -109,18 +109,21 @@ function mintEQMT
     onlyAdmin
 {
     string memory oldUUID = activeUUID[wallet];
-    if (bytes(oldUUID).length > 0 && strategies[oldUUID].active) {
-        strategies[oldUUID].active = false;
+    if (bytes(oldUUID).length >= 1) {
+        if (strategies[oldUUID].active) {
+            strategies[oldUUID].active = false;
 
-       emit EQMTEvent(
-        keccak256(bytes(oldUUID)),
-        strategies[oldUUID].tokenId,
-        4,
-        0,
-        wallet,
-        address(0),
-        uuid,
-        "");
+            emit EQMTEvent(
+                keccak256(bytes(oldUUID)),
+                strategies[oldUUID].tokenId,
+                4,
+                0,
+                wallet,
+                address(0),
+                uuid,
+                ""
+            );
+        }
     }
 
     uint256 tokenId = _tokenIdCounter++;
@@ -187,20 +190,22 @@ function adminReassign(string calldata uuid, address newWallet)
     Strategy storage p = strategies[uuid];
     address oldWallet = p.owner;
     string memory oldUUID = activeUUID[newWallet];
-    if (bytes(oldUUID).length > 0 && strategies[oldUUID].active) {
-        strategies[oldUUID].active = false;
-        
+    if (bytes(oldUUID).length >= 1) {
+        if (strategies[oldUUID].active) {
+            strategies[oldUUID].active = false;
+
         // this needs to be reassigned to the new Event call!!
-        emit EQMTEvent(
-            keccak256(bytes(uuid)),
-            strategies[oldUUID].tokenId,
-            4,
-            0,
-            address(0),
-            address(0),
-            uuid,
-            ""
-        );
+            emit EQMTEvent(
+                keccak256(bytes(uuid)),
+                strategies[oldUUID].tokenId,
+                4,
+                0,
+                address(0),
+                address(0),
+                uuid,
+                ""
+            );
+        }
     }
 
     // Use internal transfer which we've overridden
