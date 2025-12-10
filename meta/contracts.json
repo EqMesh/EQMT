@@ -4,6 +4,13 @@
   "chainId": 1,
   "contracts": [
     {
+      "version": "0.2",
+      "address": "0x1988cB209d705F49982E1a13842a7b684A281e58",
+      "status": "current",
+      "replaces": "0x0000000000000000000000000000000000000000",
+      "deployedAtBlock": 23981392
+    },
+    {
       "version": "0.1017",
       "address": "0x3A651437c2F9E3D7dd274650139Acf1A7A5B4989",
       "status": "current",

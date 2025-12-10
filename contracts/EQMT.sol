@@ -5,8 +5,8 @@ import "@openzeppelin/contracts@4.7.0/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts@4.7.0/utils/Strings.sol";
 
 contract EQMT is ERC721 {
-    address private constant previousContract = 0xbf623fe7F3adc651bF6744aB297B19598052EE49;
-    string private constant version = "0.1017";
+    address private constant previousContract = 0x0000000000000000000000000000000000000000;
+    string private constant version = "0.2";
     
     address public admin;
     uint256 private _tokenIdCounter;
