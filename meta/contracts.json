@@ -1,8 +1,77 @@
 {
   "project": "EqMesh EQMT",
   "repo": "github.com/EqMesh/EQMT",
-  "chainId": 1,
-  "contracts": [
+  "schema": 1,
+
+  "abi": {
+    "functions": {
+      "strategies": {
+        "inputs": "strategies(string)",
+        "selector": "0x780f1acd",
+        "label": "Strategy Details",
+        "returns": [
+          { "name": "fcid",    "type": "uint16"  },
+          { "name": "sanity",  "type": "string"  },
+          { "name": "uuid",    "type": "string"  },
+          { "name": "equity",  "type": "uint256" },
+          { "name": "active",  "type": "bool"    },
+          { "name": "owner",   "type": "address" },
+          { "name": "tokenId", "type": "uint256" }
+        ]
+      },
+
+      "mintEQMT": {
+        "inputs": "mintEQMT(string,address,uint16,string)",
+        "selector": "0x6a379cb5",
+        "label": "Mint EQMT"
+      },
+
+      "creditEQMT": {
+        "inputs": "creditEQMT(string,string)",
+        "selector": "0x....",
+        "label": "Credit"
+      },
+
+      "liquidateEQMT": {
+        "inputs": "liquidateEQMT(string)",
+        "selector": "0x....",
+        "label": "Liquidate"
+      }
+    },
+
+    "events": {
+      "EQMTEvent": {
+        "inputs": "EQMTEvent(bytes32,uint256,uint8,uint256,address,address,string,string)",
+        "topic0": "0x....",
+        "indexed": [
+          { "name": "uuidHash", "type": "bytes32", "topic": 1 },
+          { "name": "tokenId",  "type": "uint256", "topic": 2 }
+        ],
+        "data": [
+          { "name": "action", "type": "uint8"    },
+          { "name": "amount", "type": "uint256"  },
+          { "name": "addr1",  "type": "address"  },
+          { "name": "addr2",  "type": "address"  },
+          { "name": "uuid",   "type": "string"   },
+          { "name": "meta",   "type": "string"   }
+        ]
+      }
+    },
+
+    "enums": {
+      "EQMTEvent.action": {
+        "1": "mint",
+        "2": "credit",
+        "3": "liquidate",
+        "4": "close",
+        "5": "burn",
+        "6": "ownerChange",
+        "9": "adminUpdate"
+      }
+    }
+  },
+
+  "deployments":  [
     {
       "version": "0.201",
       "address": "0x1e374a805e2184c55e2f3a5ec35471cfdce83b3a",
