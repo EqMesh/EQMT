@@ -13,3 +13,7 @@ this makes it easy to verify on-chain transactions even if the token has ben rep
 ## deployment (v0.2) on Ethereum Mainnet
 there was a larger development gap, with the launch of EQMT 0.2 all transactions will now be run trough the token chain
 - initial Production deployment of 0.2 on [Ethereum Mainnet (1)](https://etherscan.io/address/0x1988cb209d705f49982e1a13842a7b684a281e58) at ```0x1988cB209d705F49982E1a13842a7b684A281e58```
+
+## ToDo (to be included in the next deployment)
+- add updateSanity (update sanity json to match the locally stored version for verification)
+- remove blanceOf (can be get by query strategies, if required, make sure it returns the proper value (currently returns just 1))
